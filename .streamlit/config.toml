@@ -1,0 +1,15 @@
+[theme]
+base = "light"
+primaryColor = "#1E3A8A"
+backgroundColor = "#F5F3EE"
+secondaryBackgroundColor = "#ECEAE4"
+textColor = "#1A1916"
+font = "sans serif"
+
+[server]
+# Sem mensagens de telemetria
+headless = true
+runOnSave = false
+
+[browser]
+gatherUsageStats = false

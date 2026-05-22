@@ -1,0 +1,136 @@
+{
+  "terreno": {
+    "info": {
+      "nome": "Loteamento Vila Verde",
+      "cidade": "Belo Horizonte",
+      "uf": "MG"
+    },
+    "areas": {
+      "area_gleba_m2": 100000,
+      "area_sistema_viario_m2": 22000,
+      "area_verde_m2": 8000,
+      "area_institucional_m2": 5000,
+      "area_app_m2": 0,
+      "area_lotes_m2": 65000
+    },
+    "datas": {
+      "inicio_projeto": "2026-01-01",
+      "aprovacao": "2026-07-01",
+      "lancamento_vendas": "2026-09-01",
+      "inicio_obras": "2026-10-01",
+      "termino_obras": "2028-04-01"
+    },
+    "tipologias": [
+      {
+        "nome": "Lote Padrao 250m2",
+        "quantidade": 180,
+        "area_lote_m2": 250,
+        "modo_preco": "por_m2",
+        "valor_unitario": 800
+      },
+      {
+        "nome": "Lote Esquina 360m2",
+        "quantidade": 30,
+        "area_lote_m2": 360,
+        "modo_preco": "por_m2",
+        "valor_unitario": 950
+      },
+      {
+        "nome": "Lote Comercial 500m2",
+        "quantidade": 14,
+        "area_lote_m2": 500,
+        "modo_preco": "por_m2",
+        "valor_unitario": 1100
+      }
+    ]
+  },
+
+  "aquisicao": {
+    "valor_total": 12000000,
+    "forma_pagamento": "parcelado",
+    "mes_inicio_parcelas": 0,
+    "qtd_parcelas": 24,
+    "custo_cartorio": 80000,
+    "mes_pagamento_cartorio": 0
+  },
+
+  "receitas": {
+    "tipo_permuta": "sem_permuta",
+    "permuta_fisica": [],
+    "fluxos_recebiveis": [
+      {
+        "nome": "Fluxo Padrao",
+        "percentual_sinal": 10,
+        "qtd_parcelas_sinal": 1,
+        "percentual_obra": 30,
+        "juros_parcelas_obra_am": 0.5,
+        "percentual_baloes": 10,
+        "qtd_baloes": 2,
+        "percentual_financiamento": 50,
+        "qtd_parcelas_financiamento": 120,
+        "juros_financiamento_am": 1.0
+      }
+    ],
+    "curva_vendas": [
+      { "mes_inicio": 8,  "mes_fim": 11, "percentual_estoque": 30, "fluxo_recebiveis": "Fluxo Padrao" },
+      { "mes_inicio": 12, "mes_fim": 17, "percentual_estoque": 30, "fluxo_recebiveis": "Fluxo Padrao" },
+      { "mes_inicio": 18, "mes_fim": 23, "percentual_estoque": 25, "fluxo_recebiveis": "Fluxo Padrao" },
+      { "mes_inicio": 24, "mes_fim": 35, "percentual_estoque": 15, "fluxo_recebiveis": "Fluxo Padrao" }
+    ]
+  },
+
+  "obras": {
+    "modo": "detalhado",
+    "etapas": [
+      { "nome": "Topografia",      "valor_total": 120000,  "mes_inicio": 1,  "duracao_meses": 2, "curva": "linear" },
+      { "nome": "Terraplenagem",   "valor_total": 1800000, "mes_inicio": 9,  "duracao_meses": 5, "curva": "s_curve" },
+      { "nome": "Drenagem",        "valor_total": 900000,  "mes_inicio": 11, "duracao_meses": 6, "curva": "s_curve" },
+      { "nome": "Pavimentacao",    "valor_total": 2400000, "mes_inicio": 14, "duracao_meses": 8, "curva": "s_curve" },
+      { "nome": "Calcadas e meio-fio", "valor_total": 700000, "mes_inicio": 16, "duracao_meses": 6, "curva": "linear" },
+      { "nome": "Rede de agua",    "valor_total": 600000,  "mes_inicio": 11, "duracao_meses": 5, "curva": "s_curve" },
+      { "nome": "Rede de esgoto",  "valor_total": 800000,  "mes_inicio": 12, "duracao_meses": 6, "curva": "s_curve" },
+      { "nome": "Rede eletrica",   "valor_total": 1100000, "mes_inicio": 13, "duracao_meses": 6, "curva": "s_curve" },
+      { "nome": "Iluminacao publica", "valor_total": 350000, "mes_inicio": 18, "duracao_meses": 4, "curva": "linear" },
+      { "nome": "Sinalizacao viaria", "valor_total": 90000, "mes_inicio": 21, "duracao_meses": 2, "curva": "linear" },
+      { "nome": "Paisagismo",      "valor_total": 250000,  "mes_inicio": 21, "duracao_meses": 3, "curva": "linear" }
+    ],
+    "bdi_percentual": 18,
+    "contingencia_percentual": 5
+  },
+
+  "desenvolvimento": {
+    "despesas": [
+      { "nome": "Projeto urbanistico",  "categoria": "projetos",       "valor_total": 180000, "modo": "parcelado_linear", "mes_inicio": 0,  "mes_fim": 5 },
+      { "nome": "Projetos complementares", "categoria": "projetos",    "valor_total": 220000, "modo": "parcelado_linear", "mes_inicio": 2,  "mes_fim": 7 },
+      { "nome": "Estudo ambiental (EIV)",  "categoria": "licenciamento","valor_total": 90000,  "modo": "a_vista",          "mes_pagamento": 1 },
+      { "nome": "Licencas (LP/LI/LO)",     "categoria": "licenciamento","valor_total": 150000, "modo": "parcelado_linear", "mes_inicio": 2,  "mes_fim": 8 },
+      { "nome": "Taxas e registro do loteamento", "categoria": "licenciamento", "valor_total": 200000, "modo": "a_vista",  "mes_pagamento": 8 },
+      { "nome": "Stand de vendas (CAPEX)", "categoria": "marketing",    "valor_total": 280000, "modo": "a_vista",          "mes_pagamento": 7 },
+      { "nome": "Lancamento e midia",      "categoria": "marketing",    "valor_total": 600000, "modo": "parcelado_linear", "mes_inicio": 8,  "mes_fim": 35 }
+    ],
+    "administracao": {
+      "modo": "valor_fixo",
+      "valor": 35000,
+      "mes_inicio": 0,
+      "mes_fim": null
+    }
+  },
+
+  "impostos": {
+    "tributos": {
+      "regime": "lucro_presumido",
+      "aliquota_efetiva": 6.73,
+      "itbi_percentual": 2.5,
+      "regime_apuracao": "caixa"
+    },
+    "comissao": {
+      "percentual_vgv": 6,
+      "modo_pagamento": "sobre_venda"
+    },
+    "permuta_financeira": null
+  },
+
+  "parametros": {
+    "tma_anual": 14
+  }
+}

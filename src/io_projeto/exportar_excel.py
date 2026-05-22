@@ -1,0 +1,1057 @@
+"""
+Exportacao de resultado para Excel — ferramenta de auditoria completa.
+
+Abas:
+  1. Dashboard        — KPIs, DRE, composicao custos (apresentacao executiva)
+  2. Terreno          — inputs do empreendimento + receita mensal
+  3. Receitas         — fluxos recebiveis + curva de vendas + receita mensal
+  4. Obras            — etapas + desembolso mensal por etapa
+  5. Desenvolvimento  — despesas + desembolso mensal por item
+  6. Impostos         — regime tributario + comissao + fluxo mensal
+  7. Fluxo de Caixa   — tabela mensal completa (todas as categorias)
+  8. Verificacao Rec. — detalhe de recebimentos e invariantes matematicos
+  9. Simulacao Lote   — cronograma de pagamento de 1 lote por tipologia
+
+Convencao de zeros: valores zero exibidos como celulas vazias via number_format
+com terceiro segmento vazio: 'R$ #,##0;[Red]-R$ #,##0;""'
+"""
+
+from __future__ import annotations
+
+from datetime import date as _date
+from pathlib import Path
+
+import numpy as np
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
+
+from ..engine import ResultadoCalculo, simular_lote_unitario
+from ..engine.despesas import _distribuir_etapa, _distribuir_despesa_temporal
+from ..engine.recebimentos import calcular_vgv_vendavel
+from ..engine.utilidades import meses_entre, parcela_price
+from ..modelos import Projeto
+
+
+# =====================================================================
+# PALETA ALTIPLANO
+# =====================================================================
+
+_C_DARK    = "2C2A27"   # cabecalho escuro
+_C_OCHRE   = "1E3A8A"   # azul naval — secoes principais
+_C_OCHRE_L = "BFDBFE"   # azul claro — subsecoes
+_C_STONE   = "F5F3EE"   # pedra clara
+_C_STONE_D = "ECEAE4"   # pedra media
+_C_FLOW_H  = "1E2F6E"   # azul naval escuro — cabecalho do fluxo
+_C_GREEN   = "D4EAD9"   # verde suave — resultado positivo
+_C_RED     = "F5E8E8"   # vermelho suave — resultado negativo
+_C_WHITE   = "FFFFFF"
+
+_F_W11  = Font(name="Calibri", size=11, bold=True,  color="FFFFFF")
+_F_W10  = Font(name="Calibri", size=10, bold=True,  color="FFFFFF")
+_F_B10  = Font(name="Calibri", size=10, bold=True,  color="1A1916")
+_F_N10  = Font(name="Calibri", size=10,              color="1A1916")
+_F_S9   = Font(name="Calibri", size=9,               color="5A5650")
+
+# Formatos de numero — zeros ficam em branco (terceiro segmento: "")
+_FMT_RS   = 'R$ #,##0;[Red]-R$ #,##0;""'
+_FMT_RS2  = 'R$ #,##0.00;[Red]-R$ #,##0.00;""'
+_FMT_PCT  = '0.0%;[Red]-0.0%;""'
+_FMT_PCT2 = '0.00%;[Red]-0.00%;""'
+_FMT_INT  = '#,##0;-#,##0;""'
+_FMT_NUM  = '#,##0.00;-#,##0.00;""'
+_FMT_MES  = '0'
+
+# Layout das colunas nas abas de auditoria
+_C_IN_LABEL = 1   # A — label do input
+_C_IN_VAL   = 2   # B — valor do input
+_C_IN_UNIT  = 3   # C — unidade / obs
+_C_GAP      = 4   # D — separador visual
+_C_MES      = 5   # E — numero do mes (fluxo)
+_C_FLOW1    = 6   # F — primeira coluna do fluxo
+
+
+# =====================================================================
+# HELPERS BASICOS
+# =====================================================================
+
+def _fill(cor: str) -> PatternFill:
+    return PatternFill("solid", fgColor=cor)
+
+
+def _hdr(ws, row: int, col: int, text: str, cor: str,
+         fonte=None, ncols: int = 1, height: int = 20) -> None:
+    cell = ws.cell(row, col, text)
+    cell.font = fonte or _F_W10
+    cell.fill = _fill(cor)
+    cell.alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[row].height = height
+    if ncols > 1:
+        ws.merge_cells(
+            start_row=row, start_column=col,
+            end_row=row, end_column=col + ncols - 1,
+        )
+
+
+def _kv(ws, row: int, label: str, val=None, fmt: str | None = None,
+        bold: bool = False, cl: int = _C_IN_LABEL, cv: int = _C_IN_VAL,
+        unit: str = "", cor_val: str | None = None) -> int:
+    """Escreve par label/valor. Retorna proxima linha."""
+    if label == "" and val is None:
+        return row + 1
+    c_label = ws.cell(row, cl, label)
+    c_label.font = _F_B10 if bold else _F_N10
+    if val is not None and val != "":
+        c_val = ws.cell(row, cv, val)
+        c_val.font = _F_B10 if bold else _F_N10
+        c_val.alignment = Alignment(horizontal="right")
+        if fmt:
+            c_val.number_format = fmt
+        if cor_val:
+            c_val.fill = _fill(cor_val)
+    if unit:
+        c_unit = ws.cell(row, cl + 2, unit)
+        c_unit.font = _F_S9
+    return row + 1
+
+
+def _sec(ws, row: int, titulo: str, ncols: int = 3, altura: int = 18) -> int:
+    """Cabecalho de secao ocre."""
+    _hdr(ws, row, 1, titulo, _C_OCHRE, fonte=_F_W10, ncols=ncols, height=altura)
+    return row + 1
+
+
+def _sub(ws, row: int, titulo: str, ncols: int = 3) -> int:
+    """Sub-cabecalho ocre claro."""
+    _hdr(ws, row, 1, titulo, _C_OCHRE_L, fonte=_F_B10, ncols=ncols, height=16)
+    return row + 1
+
+
+def _dim_auditoria(ws) -> None:
+    """Define larguras das colunas no layout de auditoria."""
+    ws.column_dimensions["A"].width = 36
+    ws.column_dimensions["B"].width = 20
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 2
+    ws.column_dimensions["E"].width = 7
+
+
+def _titulo_projeto(ws, projeto: Projeto, row: int = 1) -> int:
+    """Linha de titulo do projeto no topo da aba."""
+    _hdr(ws, row, 1, f"{projeto.terreno.info.nome}  —  {projeto.terreno.info.cidade}/{projeto.terreno.info.uf}",
+         _C_DARK, fonte=_F_W11, ncols=40, height=24)
+    return row + 2
+
+
+# =====================================================================
+# HELPERS DE FLUXO (lado direito das abas de auditoria)
+# =====================================================================
+
+def _cabecalho_fluxo(ws, row: int, colunas: list[str], largura: int = 15) -> int:
+    """Escreve o cabecalho da secao de fluxo (colunas = nomes das series)."""
+    _hdr(ws, row, _C_GAP, "FLUXO MENSAL", _C_FLOW_H,
+         fonte=_F_W10, ncols=2 + len(colunas))
+    # Mes
+    c_mes = ws.cell(row + 1, _C_MES, "Mes")
+    c_mes.font = _F_B10
+    c_mes.fill = _fill(_C_STONE_D)
+    c_mes.alignment = Alignment(horizontal="center")
+    # Colunas de serie
+    for i, nome in enumerate(colunas):
+        col = _C_FLOW1 + i
+        c = ws.cell(row + 1, col, nome)
+        c.font = _F_B10
+        c.fill = _fill(_C_STONE_D)
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+        if col > _C_FLOW1:
+            ws.column_dimensions[get_column_letter(col)].width = largura
+    ws.column_dimensions[get_column_letter(_C_MES)].width = 7
+    ws.column_dimensions[get_column_letter(_C_FLOW1)].width = largura
+    return row + 2
+
+
+def _linhas_fluxo(ws, row_ini: int, meses: list[int],
+                  series: list[list[float]], fmt: str = _FMT_RS,
+                  total_col: bool = False) -> None:
+    """Preenche as linhas mensais do fluxo. series[i] = lista de valores por mes."""
+    n_series = len(series)
+    for idx, mes in enumerate(meses):
+        row = row_ini + idx
+        # Mes
+        cm = ws.cell(row, _C_MES, mes)
+        cm.number_format = _FMT_MES
+        cm.font = _F_S9
+        cm.alignment = Alignment(horizontal="center")
+        cm.fill = _fill(_C_STONE if mes % 2 == 0 else _C_WHITE)
+        # Valores
+        for si in range(n_series):
+            col = _C_FLOW1 + si
+            val = series[si][idx] if idx < len(series[si]) else 0.0
+            cv = ws.cell(row, col, val if val != 0.0 else None)
+            cv.number_format = fmt
+            cv.font = _F_N10
+            cv.fill = _fill(_C_STONE if mes % 2 == 0 else _C_WHITE)
+            cv.alignment = Alignment(horizontal="right")
+
+
+# =====================================================================
+# 1. DASHBOARD
+# =====================================================================
+
+def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Dashboard")
+    ws.column_dimensions["A"].width = 42
+    ws.column_dimensions["B"].width = 26
+    ws.column_dimensions["C"].width = 16
+
+    r  = resultado.resumo
+    ind = resultado.indicadores
+    p  = projeto.terreno
+
+    def _fmt_rs(v) -> str:
+        if v is None:
+            return "—"
+        n = int(round(abs(v)))
+        s = f"{n:,}".replace(",", ".")
+        return f"R$ {s}" if v >= 0 else f"-R$ {s}"
+
+    def _fmt_pct(v) -> str:
+        return f"{v * 100:.1f}%" if v is not None else "—"
+
+    linha = 1
+
+    # Titulo
+    _hdr(ws, linha, 1, "ANALISE DE VIABILIDADE ECONOMICA", _C_DARK,
+         fonte=Font(name="Calibri", size=16, bold=True, color="FFFFFF"),
+         ncols=3, height=30)
+    linha += 1
+    _hdr(ws, linha, 1, f"{p.info.nome}  —  {p.info.cidade}/{p.info.uf}  |  {_date.today().strftime('%d/%m/%Y')}",
+         _C_OCHRE, fonte=_F_W11, ncols=3, height=20)
+    linha += 2
+
+    # KPIs
+    linha = _sec(ws, linha, "INDICADORES PRINCIPAIS", ncols=3, altura=20)
+
+    tir = ind.get("tir_anual")
+    pb  = ind.get("payback_simples_meses")
+    mult = ind.get("lucro_sobre_exposicao")
+    margem_vv = r.get("margem_sobre_vgv_vendavel")
+    margem_vb = r.get("margem_sobre_vgv_bruto")
+
+    kpis = [
+        ("VGV Bruto",                    _fmt_rs(r["vgv_bruto"]),    False, None),
+        ("VGV Vendavel",                 _fmt_rs(r["vgv_vendavel"]), False, None),
+        ("Receita Total Recebida",       _fmt_rs(r["vgv_total_recebido"]), False, None),
+        ("", "", False, None),
+        ("Resultado Bruto (Lucro)",      _fmt_rs(r["lucro_liquido"]), True,
+         _C_GREEN if r["lucro_liquido"] >= 0 else _C_RED),
+        ("Margem s/ VGV Vendavel",       _fmt_pct(margem_vv), True,
+         _C_GREEN if (margem_vv or 0) >= 0 else _C_RED),
+        ("Margem s/ VGV Bruto",         _fmt_pct(margem_vb), False, None),
+        ("", "", False, None),
+        ("TIR (ao ano)",                 f"{tir*100:.2f}%" if tir else "—", True, None),
+        ("VPL",                          _fmt_rs(ind["vpl"]), True,
+         _C_GREEN if ind["vpl"] >= 0 else _C_RED),
+        ("Payback Simples",              f"Mes {pb}" if pb else "—", False, None),
+        ("Exposicao Maxima de Caixa",   _fmt_rs(ind["exposicao_maxima"]), False, _C_RED),
+        ("Multiplicador Lucro/Exposicao", f"{mult:.2f}x".replace(".", ",") if mult else "—", False, None),
+    ]
+
+    for label, val, negrito, cor_fundo in kpis:
+        if not label:
+            linha += 1
+            continue
+        cl = ws.cell(linha, 1, label)
+        cl.font = _F_B10 if negrito else _F_N10
+        if cor_fundo:
+            cl.fill = _fill(cor_fundo)
+        cv = ws.cell(linha, 2, val)
+        cv.font = _F_B10 if negrito else _F_N10
+        cv.alignment = Alignment(horizontal="right")
+        if cor_fundo:
+            cv.fill = _fill(cor_fundo)
+        linha += 1
+
+    linha += 1
+
+    # DRE
+    linha = _sec(ws, linha, "DEMONSTRATIVO DE RESULTADO (DRE)", ncols=3, altura=20)
+
+    dre = [
+        ("VGV Bruto",                               r["vgv_bruto"],          False, _C_STONE),
+        ("  (-) Permuta Fisica / Deducoes",         r["vgv_bruto"] - r["vgv_vendavel"], False, _C_WHITE),
+        ("VGV Vendavel",                             r["vgv_vendavel"],        True,  _C_STONE),
+        ("  (+) Receita Financeira (Juros)",         r["receita_financeira"],  False, _C_WHITE),
+        ("Receita Total Recebida",                   r["vgv_total_recebido"],  True,  _C_STONE),
+        ("",                                         None,                     False, _C_WHITE),
+        ("  (-) Aquisicao do Terreno",              r["custo_terreno_aquisicao"], False, _C_WHITE),
+        ("  (-) Cartorio",                           r["custo_terreno_cartorio"], False, _C_WHITE),
+        ("  (-) Obras (com BDI e Contingencia)",    r["custo_obras"],         False, _C_WHITE),
+        ("  (-) Projetos",                          r["custo_projetos"],      False, _C_WHITE),
+        ("  (-) Licenciamento",                     r["custo_licenciamento"], False, _C_WHITE),
+        ("  (-) Marketing",                         r["custo_marketing"],     False, _C_WHITE),
+        ("  (-) Outros Desenvolvimento",            r["custo_outros"],        False, _C_WHITE),
+        ("  (-) Administracao",                     r["custo_administracao"], False, _C_WHITE),
+        ("  (-) Comissao de Vendas",                r["custo_comissao"],      False, _C_WHITE),
+        ("  (-) Impostos / Tributacao",             r["custo_impostos"],      False, _C_WHITE),
+        ("  (-) Permuta Financeira",                r["custo_permuta_financeira"], False, _C_WHITE),
+        ("Total de Saidas",                         r["total_saidas"],         True,  _C_STONE),
+        ("",                                        None,                      False, _C_WHITE),
+        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         r["lucro_liquido"],        True,
+         _C_GREEN if r["lucro_liquido"] >= 0 else _C_RED),
+    ]
+
+    vgv_b = r["vgv_bruto"] if r["vgv_bruto"] > 0 else 1.0
+    ws.cell(linha, 1, "Item").font = _F_B10
+    ws.cell(linha, 1).fill = _fill(_C_STONE_D)
+    ws.cell(linha, 2, "Valor (R$)").font = _F_B10
+    ws.cell(linha, 2).fill = _fill(_C_STONE_D)
+    ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+    ws.cell(linha, 3, "% VGV Bruto").font = _F_B10
+    ws.cell(linha, 3).fill = _fill(_C_STONE_D)
+    ws.cell(linha, 3).alignment = Alignment(horizontal="right")
+    linha += 1
+
+    for label, val, negrito, cor in dre:
+        if not label:
+            linha += 1
+            continue
+        cl = ws.cell(linha, 1, label)
+        cl.font = _F_B10 if negrito else _F_N10
+        cl.fill = _fill(cor)
+        if val is not None:
+            cv = ws.cell(linha, 2, val)
+            cv.font = _F_B10 if negrito else _F_N10
+            cv.number_format = _FMT_RS
+            cv.alignment = Alignment(horizontal="right")
+            cv.fill = _fill(cor)
+            cp = ws.cell(linha, 3, val / vgv_b if vgv_b else 0)
+            cp.font = _F_N10
+            cp.number_format = _FMT_PCT
+            cp.alignment = Alignment(horizontal="right")
+            cp.fill = _fill(cor)
+        linha += 1
+
+
+# =====================================================================
+# 2. TERRENO
+# =====================================================================
+
+def _aba_terreno(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Terreno")
+    _dim_auditoria(ws)
+
+    p  = projeto.terreno
+    df = resultado.fluxo_caixa
+    linha = _titulo_projeto(ws, projeto)
+
+    # ---- INPUTS ----
+    linha = _sec(ws, linha, "IDENTIFICACAO", ncols=3)
+    linha = _kv(ws, linha, "Nome do empreendimento", p.info.nome)
+    linha = _kv(ws, linha, "Cidade / UF", f"{p.info.cidade} / {p.info.uf}")
+    linha += 1
+
+    linha = _sec(ws, linha, "QUADRO DE AREAS", ncols=3)
+    linha = _kv(ws, linha, "Area da gleba",            p.areas.area_gleba_m2,          _FMT_NUM, unit="m²")
+    linha = _kv(ws, linha, "  Sistema viario",         p.areas.area_sistema_viario_m2, _FMT_NUM, unit="m²")
+    linha = _kv(ws, linha, "  Area verde / institucional",
+                p.areas.area_verde_m2 + p.areas.area_institucional_m2, _FMT_NUM, unit="m²")
+    linha = _kv(ws, linha, "  Area APP",               p.areas.area_app_m2,            _FMT_NUM, unit="m²")
+    linha = _kv(ws, linha, "Area total de lotes",      p.areas.area_lotes_m2,          _FMT_NUM, unit="m²")
+    linha = _kv(ws, linha, "Aproveitamento (%)",       p.areas.aproveitamento * 100,   _FMT_NUM, unit="%")
+    linha += 1
+
+    linha = _sec(ws, linha, "TIPOLOGIAS", ncols=3)
+    ws.cell(linha, 1, "Tipologia").font = _F_B10
+    ws.cell(linha, 2, "Qtd").font = _F_B10
+    ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+    ws.cell(linha, 3, "Area m² / VGV Lote").font = _F_B10
+    for col in (1, 2, 3):
+        ws.cell(linha, col).fill = _fill(_C_STONE_D)
+    linha += 1
+    for tip in p.tipologias:
+        ws.cell(linha, 1, tip.nome).font = _F_N10
+        ws.cell(linha, 2, tip.quantidade).font = _F_N10
+        ws.cell(linha, 2).number_format = _FMT_INT
+        ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+        ws.cell(linha, 3, f"{tip.area_lote_m2:.0f} m²  |  R$ {int(tip.vgv_lote):,}".replace(",", ".")).font = _F_N10
+        linha += 1
+    linha = _kv(ws, linha, "TOTAL LOTES", p.total_lotes, _FMT_INT, bold=True)
+    linha = _kv(ws, linha, "VGV Bruto total", p.vgv_bruto, _FMT_RS, bold=True)
+    linha += 1
+
+    linha = _sec(ws, linha, "DATAS DO PROJETO", ncols=3)
+    d = p.datas
+    linha = _kv(ws, linha, "Inicio do projeto",   d.inicio_projeto.strftime("%m/%Y"))
+    linha = _kv(ws, linha, "Aprovacao",            d.aprovacao.strftime("%m/%Y"))
+    linha = _kv(ws, linha, "Lancamento de vendas", d.lancamento_vendas.strftime("%m/%Y"))
+    linha = _kv(ws, linha, "Inicio das obras",     d.inicio_obras.strftime("%m/%Y"))
+    linha = _kv(ws, linha, "Termino das obras",    d.termino_obras.strftime("%m/%Y"))
+
+    # ---- FLUXO (lado direito) ----
+    colunas_fluxo = ["Rec. Nominal Venda", "Rec. Financeira (Juros)", "Total Entradas"]
+    df_cols = {
+        "Rec. Nominal Venda":        "Receita Nominal Venda",
+        "Rec. Financeira (Juros)":   "Receita Financeira (Juros)",
+        "Total Entradas":            "Total Entradas",
+    }
+    meses = df["Mes"].tolist()
+    series = [[df[col].iloc[i] for i in range(len(df))] for col in df_cols.values() if col in df.columns]
+    if len(series) < len(colunas_fluxo):
+        series = series + [[0.0] * len(meses)] * (len(colunas_fluxo) - len(series))
+
+    row_flow = _cabecalho_fluxo(ws, 3, colunas_fluxo)
+    _linhas_fluxo(ws, row_flow, meses, series)
+
+
+# =====================================================================
+# 3. RECEITAS
+# =====================================================================
+
+def _aba_receitas(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Receitas")
+    _dim_auditoria(ws)
+
+    rec = projeto.receitas
+    df  = resultado.fluxo_caixa
+    linha = _titulo_projeto(ws, projeto)
+
+    linha = _sec(ws, linha, "FLUXOS DE RECEBIVEIS", ncols=3)
+    for fl in rec.fluxos_recebiveis:
+        linha = _sub(ws, linha, fl.nome, ncols=3)
+        linha = _kv(ws, linha, "  Sinal",                fl.percentual_sinal,          _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Parcelas de sinal",  fl.qtd_parcelas_sinal,         _FMT_INT, unit="parcelas")
+        linha = _kv(ws, linha, "  Parcelas durante obra", fl.percentual_obra,           _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Juros parcelas obra", fl.juros_parcelas_obra_am,    _FMT_NUM, unit="% a.m.")
+        linha = _kv(ws, linha, "  Baloes anuais",         fl.percentual_baloes,         _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Qtd baloes",          fl.qtd_baloes,                _FMT_INT)
+        linha = _kv(ws, linha, "  Financiamento pos-obra", fl.percentual_financiamento, _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Parcelas financiamento", fl.qtd_parcelas_financiamento, _FMT_INT)
+        linha = _kv(ws, linha, "    Juros financiamento", fl.juros_financiamento_am,    _FMT_NUM, unit="% a.m.")
+        soma = fl.percentual_sinal + fl.percentual_obra + fl.percentual_baloes + fl.percentual_financiamento
+        linha = _kv(ws, linha, "  SOMA (deve ser 100%)", soma, _FMT_NUM, bold=True,
+                    cor_val=_C_GREEN if abs(soma - 100) < 0.01 else _C_RED)
+        linha += 1
+
+    linha = _sec(ws, linha, "CURVA DE VENDAS", ncols=3)
+    ws.cell(linha, 1, "Faixa").font = _F_B10
+    ws.cell(linha, 2, "Mes Ini / Fim").font = _F_B10
+    ws.cell(linha, 3, "% Estoque / Fluxo").font = _F_B10
+    for col in (1, 2, 3):
+        ws.cell(linha, col).fill = _fill(_C_STONE_D)
+    linha += 1
+    for i, faixa in enumerate(rec.curva_vendas, start=1):
+        ws.cell(linha, 1, f"Faixa {i}").font = _F_N10
+        ws.cell(linha, 2, f"M{faixa.mes_inicio} – M{faixa.mes_fim}").font = _F_N10
+        ws.cell(linha, 3, f"{faixa.percentual_estoque:.1f}%  |  {faixa.fluxo_recebiveis}").font = _F_N10
+        linha += 1
+    soma_cv = sum(f.percentual_estoque for f in rec.curva_vendas)
+    linha = _kv(ws, linha, "SOMA CURVA (deve ser 100%)", soma_cv, _FMT_NUM, bold=True,
+                cor_val=_C_GREEN if abs(soma_cv - 100) < 0.01 else _C_RED)
+
+    # Permuta
+    linha += 1
+    linha = _sec(ws, linha, "PERMUTA", ncols=3)
+    linha = _kv(ws, linha, "Tipo de permuta", rec.tipo_permuta)
+    if rec.tipo_permuta == "fisica" and rec.permuta_fisica:
+        for pm in rec.permuta_fisica:
+            linha = _kv(ws, linha, f"  {pm.tipologia}", pm.percentual, _FMT_NUM, unit="% dos lotes")
+
+    # ---- FLUXO ----
+    colunas_fluxo = ["Rec. Nominal", "Rec. Juros", "Total Entradas"]
+    df_cols_vals = []
+    for col_name in ["Receita Nominal Venda", "Receita Financeira (Juros)", "Total Entradas"]:
+        if col_name in df.columns:
+            df_cols_vals.append(df[col_name].tolist())
+        else:
+            df_cols_vals.append([0.0] * len(df))
+    meses = df["Mes"].tolist()
+    row_flow = _cabecalho_fluxo(ws, 3, colunas_fluxo)
+    _linhas_fluxo(ws, row_flow, meses, df_cols_vals)
+
+
+# =====================================================================
+# 4. OBRAS
+# =====================================================================
+
+def _aba_obras(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Obras")
+    _dim_auditoria(ws)
+
+    obras = projeto.obras
+    df    = resultado.fluxo_caixa
+    linha = _titulo_projeto(ws, projeto)
+
+    multiplicador = (
+        (1 + obras.bdi_percentual / 100)
+        * (1 + obras.contingencia_percentual / 100)
+    )
+
+    linha = _sec(ws, linha, "PARAMETROS DE OBRAS", ncols=3)
+    linha = _kv(ws, linha, "Modo", "Detalhado" if obras.modo == "detalhado" else "Resumido")
+    linha = _kv(ws, linha, "BDI (%)", obras.bdi_percentual, _FMT_NUM, unit="%")
+    linha = _kv(ws, linha, "Contingencia (%)", obras.contingencia_percentual, _FMT_NUM, unit="%")
+    linha = _kv(ws, linha, "Multiplicador (BDI x Contingencia)", multiplicador, _FMT_NUM, bold=True)
+    linha += 1
+
+    horizonte = len(df) - 1
+    meses     = df["Mes"].tolist()
+
+    if obras.modo == "detalhado" and obras.etapas:
+        linha = _sec(ws, linha, "ETAPAS", ncols=3)
+        ws.cell(linha, 1, "Etapa").font = _F_B10
+        ws.cell(linha, 2, "Valor Direto (R$)").font = _F_B10
+        ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+        ws.cell(linha, 3, "M.Ini / Dur / Curva").font = _F_B10
+        for col in (1, 2, 3):
+            ws.cell(linha, col).fill = _fill(_C_STONE_D)
+        linha += 1
+
+        custo_direto_total = 0.0
+        for et in obras.etapas:
+            ws.cell(linha, 1, et.nome).font = _F_N10
+            ws.cell(linha, 2, et.valor_total).number_format = _FMT_RS
+            ws.cell(linha, 2).font = _F_N10
+            ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+            ws.cell(linha, 3, f"M{et.mes_inicio}  /  {et.duracao_meses}m  /  {et.curva}").font = _F_S9
+            custo_direto_total += et.valor_total
+            linha += 1
+
+        linha = _kv(ws, linha, "Custo Direto Total", custo_direto_total, _FMT_RS, bold=True)
+        linha = _kv(ws, linha, "Custo Total (com BDI e Contingencia)",
+                    custo_direto_total * multiplicador, _FMT_RS, bold=True)
+
+        # Fluxo por etapa
+        colunas_fluxo = [et.nome for et in obras.etapas] + ["TOTAL OBRAS"]
+        series = []
+        total_vec = np.zeros(horizonte + 1)
+        for et in obras.etapas:
+            vec = _distribuir_etapa(et, horizonte) * multiplicador
+            total_vec += vec
+            series.append([float(vec[m]) for m in meses])
+        series.append([float(total_vec[m]) for m in meses])
+
+    else:  # resumido
+        res = obras.resumido
+        if res:
+            linha = _sec(ws, linha, "ORCAMENTO RESUMIDO", ncols=3)
+            linha = _kv(ws, linha, "Base de calculo", res.base_calculo)
+            linha = _kv(ws, linha, "Valor por m2", res.valor_por_m2, _FMT_RS2, unit="R$/m²")
+            linha = _kv(ws, linha, "Mes inicio", res.mes_inicio, _FMT_INT, unit="mês")
+            linha = _kv(ws, linha, "Duracao", res.duracao_meses, _FMT_INT, unit="meses")
+
+        colunas_fluxo = ["TOTAL OBRAS"]
+        if "Obras" in df.columns:
+            series = [df["Obras"].tolist()]
+        else:
+            series = [[0.0] * len(meses)]
+
+    row_flow = _cabecalho_fluxo(ws, 3, colunas_fluxo, largura=14)
+    _linhas_fluxo(ws, row_flow, meses, series)
+
+
+# =====================================================================
+# 5. DESENVOLVIMENTO
+# =====================================================================
+
+def _aba_desenvolvimento(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Desenvolvimento")
+    _dim_auditoria(ws)
+
+    dev = projeto.desenvolvimento
+    df  = resultado.fluxo_caixa
+    linha = _titulo_projeto(ws, projeto)
+
+    horizonte = len(df) - 1
+    meses     = df["Mes"].tolist()
+
+    linha = _sec(ws, linha, "DESPESAS DE LOTEAMENTO", ncols=3)
+    ws.cell(linha, 1, "Despesa").font = _F_B10
+    ws.cell(linha, 2, "Valor Total (R$)").font = _F_B10
+    ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+    ws.cell(linha, 3, "Categoria / Modo").font = _F_B10
+    for col in (1, 2, 3):
+        ws.cell(linha, col).fill = _fill(_C_STONE_D)
+    linha += 1
+
+    total_desp = 0.0
+    for desp in dev.despesas:
+        ws.cell(linha, 1, desp.nome).font = _F_N10
+        ws.cell(linha, 2, desp.valor_total).number_format = _FMT_RS
+        ws.cell(linha, 2).font = _F_N10
+        ws.cell(linha, 2).alignment = Alignment(horizontal="right")
+        ws.cell(linha, 3, f"{desp.categoria}  /  {desp.modo}").font = _F_S9
+        total_desp += desp.valor_total
+        linha += 1
+
+    linha = _kv(ws, linha, "Total Despesas", total_desp, _FMT_RS, bold=True)
+    linha += 1
+
+    linha = _sec(ws, linha, "ADMINISTRACAO", ncols=3)
+    linha = _kv(ws, linha, "Percentual sobre receita mensal",
+                dev.administracao.percentual, _FMT_NUM, unit="%")
+    linha += 1
+
+    # Fluxo: categorias do fluxo_caixa + admin
+    cat_map = {
+        "Projetos":              "Projetos",
+        "Licenciamento":         "Licenciamento",
+        "Marketing":             "Marketing",
+        "Outros Desenv.":        "Outros Desenvolvimento",
+        "Administracao":         "Administracao",
+    }
+    colunas_fluxo = list(cat_map.keys()) + ["TOTAL DESENV."]
+    series = []
+    total_vec = [0.0] * len(meses)
+    for label, col_df in cat_map.items():
+        if col_df in df.columns:
+            vals = df[col_df].tolist()
+        else:
+            vals = [0.0] * len(meses)
+        series.append(vals)
+        total_vec = [total_vec[i] + vals[i] for i in range(len(meses))]
+    series.append(total_vec)
+
+    row_flow = _cabecalho_fluxo(ws, 3, colunas_fluxo, largura=14)
+    _linhas_fluxo(ws, row_flow, meses, series)
+
+
+# =====================================================================
+# 6. IMPOSTOS
+# =====================================================================
+
+def _aba_impostos(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Impostos")
+    _dim_auditoria(ws)
+
+    imp = projeto.impostos
+    df  = resultado.fluxo_caixa
+    linha = _titulo_projeto(ws, projeto)
+
+    linha = _sec(ws, linha, "REGIME TRIBUTARIO", ncols=3)
+    linha = _kv(ws, linha, "Regime", imp.tributos.regime)
+    linha = _kv(ws, linha, "Aliquota efetiva (%)", imp.tributos.aliquota_efetiva, _FMT_NUM, unit="%")
+    linha = _kv(ws, linha, "Regime de apuracao", imp.tributos.regime_apuracao)
+    linha += 1
+
+    linha = _sec(ws, linha, "COMISSAO DE VENDAS", ncols=3)
+    com = imp.comissao
+    linha = _kv(ws, linha, "Percentual sobre VGV (%)", com.percentual_vgv, _FMT_NUM, unit="%")
+    linha = _kv(ws, linha, "Modo de pagamento", com.modo_pagamento)
+    if com.modo_pagamento == "misto":
+        linha = _kv(ws, linha, "  % no ato", com.misto_percentual_no_ato, _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "  Parcelas diluidas", com.misto_qtd_parcelas, _FMT_INT)
+    linha += 1
+
+    if imp.permuta_financeira:
+        pf = imp.permuta_financeira
+        linha = _sec(ws, linha, "PERMUTA FINANCEIRA", ncols=3)
+        linha = _kv(ws, linha, "Percentual do VGV (%)", pf.percentual_vgv, _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "Modo de pagamento", pf.modo_pagamento)
+
+    # Fluxo
+    col_map = {
+        "Comissao":         "Comissao",
+        "Impostos":         "Impostos",
+        "Permuta Fin.":     "Permuta Financeira",
+    }
+    colunas_fluxo = list(col_map.keys()) + ["TOTAL"]
+    series = []
+    total_vec = [0.0] * len(df)
+    meses = df["Mes"].tolist()
+    for label, col_df in col_map.items():
+        if col_df in df.columns:
+            vals = df[col_df].tolist()
+        else:
+            vals = [0.0] * len(df)
+        series.append(vals)
+        total_vec = [total_vec[i] + vals[i] for i in range(len(df))]
+    series.append(total_vec)
+
+    row_flow = _cabecalho_fluxo(ws, 3, colunas_fluxo, largura=16)
+    _linhas_fluxo(ws, row_flow, meses, series)
+
+
+# =====================================================================
+# 7. FLUXO DE CAIXA COMPLETO
+# =====================================================================
+
+def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalculo) -> None:
+    ws = wb.create_sheet("Fluxo de Caixa")
+    df = resultado.fluxo_caixa
+
+    # Linhas que devem ser destacadas
+    _linhas_negrito  = {"Total Entradas", "Total Saidas", "Saldo Acumulado"}
+    _linhas_verde    = {"Total Entradas"}
+    _linhas_vermelha = {"Total Saidas"}
+    _linhas_azul     = {"Saldo Acumulado", "Saldo Descontado Acumulado"}
+
+    cols = [c for c in df.columns if c != "Mes"]
+    meses_lista = df["Mes"].tolist()
+
+    # Computar marcos localmente (sem importar da interface)
+    try:
+        inicio = projeto.terreno.datas.inicio_projeto
+        _marcos_dict: dict[int, str] = {
+            0: "Inicio",
+            meses_entre(inicio, projeto.terreno.datas.aprovacao): "Aprovacao",
+            meses_entre(inicio, projeto.terreno.datas.lancamento_vendas): "Lancamento",
+            meses_entre(inicio, projeto.terreno.datas.inicio_obras): "Ini. Obras",
+            meses_entre(inicio, projeto.terreno.datas.termino_obras): "Fim Obras",
+        }
+    except Exception:
+        _marcos_dict = {}
+
+    # Cabecalho dos meses (transposto: items como linhas, meses como colunas)
+    # Linha 1: "Item" + labels de mes como "M0", "M1", ...
+    ws.cell(1, 1, "Item").font = _F_W10
+    ws.cell(1, 1).fill = _fill(_C_DARK)
+    ws.cell(1, 1).alignment = Alignment(horizontal="left", vertical="center", indent=1)
+    ws.row_dimensions[1].height = 20
+    ws.column_dimensions["A"].width = 30
+
+    for j, mes in enumerate(meses_lista, start=2):
+        c = ws.cell(1, j, f"M{int(mes)}")
+        c.font = Font(name="Calibri", size=9, bold=True, color="FFFFFF")
+        c.fill = _fill(_C_DARK)
+        c.alignment = Alignment(horizontal="center")
+        ws.column_dimensions[get_column_letter(j)].width = 12
+
+    # Linha 2: "Marcos" — marcos do projeto
+    _C_OCHRE_F = "F5EED8"
+    c_marco_label = ws.cell(2, 1, "Marcos")
+    c_marco_label.font = Font(name="Calibri", size=9, bold=False, italic=True, color=_C_OCHRE)
+    c_marco_label.fill = _fill(_C_OCHRE_F)
+    c_marco_label.alignment = Alignment(indent=1)
+    ws.row_dimensions[2].height = 14
+
+    for j, mes in enumerate(meses_lista, start=2):
+        label = _marcos_dict.get(int(mes), "")
+        c = ws.cell(2, j, label if label else None)
+        c.fill = _fill(_C_OCHRE_F)
+        if label:
+            c.font = Font(name="Calibri", size=9, bold=True, color=_C_OCHRE)
+            c.alignment = Alignment(horizontal="center")
+
+    # Dados: uma linha por categoria, comecando em linha 3
+    for i, col_name in enumerate(cols, start=3):
+        negrito = col_name in _linhas_negrito
+        cor = (
+            _C_GREEN    if col_name in _linhas_verde
+            else _C_RED if col_name in _linhas_vermelha
+            else _C_STONE if col_name in _linhas_azul
+            else (_C_STONE_D if i % 2 == 0 else _C_WHITE)
+        )
+        c_label = ws.cell(i, 1, col_name)
+        c_label.font = _F_B10 if negrito else _F_N10
+        c_label.fill = _fill(cor)
+        c_label.alignment = Alignment(indent=1)
+        ws.row_dimensions[i].height = 15
+
+        for j, val in enumerate(df[col_name].tolist(), start=2):
+            cv = ws.cell(i, j, val if val != 0.0 else None)
+            cv.number_format = _FMT_RS
+            cv.font = _F_B10 if negrito else _F_N10
+            cv.fill = _fill(cor)
+            cv.alignment = Alignment(horizontal="right")
+
+    ws.freeze_panes = "B3"
+
+
+# =====================================================================
+# 8. VERIFICACAO DE RECEITAS
+# =====================================================================
+
+def _detalhar_venda(
+    vgv_venda: float, mes_venda: int, fluxo, mes_termino_obras: int
+) -> list[dict]:
+    eventos: list[dict] = []
+
+    valor_sinal = vgv_venda * (fluxo.percentual_sinal / 100)
+    if valor_sinal > 0 and fluxo.qtd_parcelas_sinal > 0:
+        parcela_s = valor_sinal / fluxo.qtd_parcelas_sinal
+        for k in range(fluxo.qtd_parcelas_sinal):
+            eventos.append({"tipo": "Sinal", "mes": mes_venda + k,
+                            "valor": parcela_s, "principal": parcela_s,
+                            "juros": 0.0, "saldo_devedor": 0.0})
+
+    valor_obra = vgv_venda * (fluxo.percentual_obra / 100)
+    if valor_obra > 0:
+        mes_ini_obra = mes_venda + max(fluxo.qtd_parcelas_sinal, 1)
+        qtd_obra = mes_termino_obras - mes_ini_obra + 1
+        if qtd_obra > 0:
+            i = fluxo.juros_parcelas_obra_am / 100
+            parc = parcela_price(valor_obra, i, qtd_obra)
+            saldo = valor_obra
+            for k in range(qtd_obra):
+                j = saldo * i
+                amort = parc - j
+                saldo = max(saldo - amort, 0.0)
+                eventos.append({"tipo": "Parcela Obra", "mes": mes_ini_obra + k,
+                                "valor": parc, "principal": amort,
+                                "juros": j, "saldo_devedor": saldo})
+        else:
+            eventos.append({"tipo": "Parcela Obra (concentrada)", "mes": mes_ini_obra,
+                            "valor": valor_obra, "principal": valor_obra,
+                            "juros": 0.0, "saldo_devedor": 0.0})
+
+    valor_baloes = vgv_venda * (fluxo.percentual_baloes / 100)
+    if valor_baloes > 0 and fluxo.qtd_baloes > 0:
+        valor_balao = valor_baloes / fluxo.qtd_baloes
+        for k in range(1, fluxo.qtd_baloes + 1):
+            eventos.append({"tipo": f"Balao #{k}", "mes": mes_venda + k * 12,
+                            "valor": valor_balao, "principal": valor_balao,
+                            "juros": 0.0, "saldo_devedor": 0.0})
+
+    valor_fin = vgv_venda * (fluxo.percentual_financiamento / 100)
+    if valor_fin > 0 and fluxo.qtd_parcelas_financiamento > 0:
+        i = fluxo.juros_financiamento_am / 100
+        parc_fin = parcela_price(valor_fin, i, fluxo.qtd_parcelas_financiamento)
+        saldo = valor_fin
+        for k in range(fluxo.qtd_parcelas_financiamento):
+            j = saldo * i
+            amort = parc_fin - j
+            saldo = max(saldo - amort, 0.0)
+            eventos.append({"tipo": "Financiamento", "mes": mes_termino_obras + 1 + k,
+                            "valor": parc_fin, "principal": amort,
+                            "juros": j, "saldo_devedor": saldo})
+
+    eventos.sort(key=lambda x: x["mes"])
+    return eventos
+
+
+def _aba_verificacao_receitas(
+    wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo
+) -> None:
+    ws = wb.create_sheet("Verificacao Receitas")
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 20
+    ws.column_dimensions["D"].width = 20
+    ws.column_dimensions["E"].width = 20
+    ws.column_dimensions["F"].width = 20
+
+    terreno  = projeto.terreno
+    receitas = projeto.receitas
+    r        = resultado.resumo
+
+    vgv_vendavel = calcular_vgv_vendavel(terreno, receitas)
+    mes_termino  = meses_entre(terreno.datas.inicio_projeto, terreno.datas.termino_obras)
+    mapa_fluxos  = {f.nome: f for f in receitas.fluxos_recebiveis}
+
+    mapa_permuta: dict[str, float] = {}
+    if receitas.tipo_permuta == "fisica":
+        mapa_permuta = {p.tipologia: p.percentual for p in receitas.permuta_fisica}
+    total_lotes_vendaveis = sum(
+        tip.quantidade * (1 - mapa_permuta.get(tip.nome, 0.0) / 100)
+        for tip in terreno.tipologias
+    )
+
+    _hdr(ws, 1, 1, "VERIFICACAO DE RECEITAS — FLUXO DETALHADO POR MES DE VENDA",
+         _C_DARK, fonte=_F_W11, ncols=6, height=24)
+
+    def _rs(v: float) -> str:
+        n = int(round(abs(v)))
+        s = f"{n:,}".replace(",", ".")
+        return f"R$ {s}" if v >= 0 else f"-R$ {s}"
+
+    info = (
+        f"VGV Vendavel: {_rs(vgv_vendavel)}"
+        f"    Principal: {_rs(r['receita_nominal_venda'])}"
+        f"    Juros: {_rs(r['receita_financeira'])}"
+        f"    Total: {_rs(r['vgv_total_recebido'])}"
+    )
+    cel_info = ws.cell(2, 1, info)
+    cel_info.font = _F_B10
+    ws.merge_cells("A2:F2")
+
+    linha = 4
+    total_principal = 0.0
+    total_juros     = 0.0
+    total_valor     = 0.0
+
+    for faixa in receitas.curva_vendas:
+        if faixa.fluxo_recebiveis not in mapa_fluxos:
+            continue
+        fluxo = mapa_fluxos[faixa.fluxo_recebiveis]
+        qtd_meses = max(1, faixa.mes_fim - faixa.mes_inicio + 1)
+        vgv_por_mes  = vgv_vendavel * (faixa.percentual_estoque / 100) / qtd_meses
+        lotes_por_mes = total_lotes_vendaveis * (faixa.percentual_estoque / 100) / qtd_meses
+
+        for mes_venda in range(faixa.mes_inicio, faixa.mes_fim + 1):
+            eventos = _detalhar_venda(vgv_por_mes, mes_venda, fluxo, mes_termino)
+            if not eventos:
+                continue
+
+            sub_valor     = sum(e["valor"]     for e in eventos)
+            sub_principal = sum(e["principal"] for e in eventos)
+            sub_juros     = sum(e["juros"]     for e in eventos)
+
+            # Cabecalho da venda
+            partes = [f"M{mes_venda}", f"Fluxo: {fluxo.nome}",
+                      f"VGV: {_rs(vgv_por_mes)}", f"Lotes: {lotes_por_mes:.3f}"]
+            if sub_juros > 0.01:
+                partes.append(f"Juros: {_rs(sub_juros)}")
+            cel = ws.cell(linha, 1, "   ".join(partes))
+            cel.font = _F_W10
+            cel.fill = _fill(_C_OCHRE)
+            ws.merge_cells(f"A{linha}:F{linha}")
+            ws.row_dimensions[linha].height = 18
+            linha += 1
+
+            # Cabecalho das colunas
+            for ci, txt in enumerate(["Tipo", "Mes Receb.", "Valor (R$)",
+                                       "Principal (R$)", "Juros (R$)", "Saldo Dev. (R$)"], start=1):
+                c = ws.cell(linha, ci, txt)
+                c.font = _F_B10
+                c.fill = _fill(_C_STONE_D)
+            linha += 1
+
+            for ev in eventos:
+                ws.cell(linha, 1, ev["tipo"]).font = _F_N10
+                ws.cell(linha, 2, ev["mes"]).number_format = _FMT_MES
+                ws.cell(linha, 2).alignment = Alignment(horizontal="center")
+                for ci, key in [(3, "valor"), (4, "principal"), (5, "juros"), (6, "saldo_devedor")]:
+                    v = ev[key]
+                    c = ws.cell(linha, ci, v if v != 0.0 else None)
+                    c.number_format = _FMT_RS2
+                    if key == "juros" and v > 0.01:
+                        c.fill = _fill("FFF0CC")
+                linha += 1
+
+            # Subtotal
+            ws.cell(linha, 1, "Subtotal").font = _F_B10
+            ws.cell(linha, 1).fill = _fill(_C_STONE_D)
+            for ci, v in [(3, sub_valor), (4, sub_principal), (5, sub_juros)]:
+                c = ws.cell(linha, ci, v if v != 0.0 else None)
+                c.font = _F_B10
+                c.number_format = _FMT_RS2
+                c.fill = _fill(_C_GREEN if ci == 4 else _C_STONE_D)
+            linha += 2
+
+            total_principal += sub_principal
+            total_juros     += sub_juros
+            total_valor     += sub_valor
+
+    # Total geral
+    _hdr(ws, linha, 1, "TOTAL GERAL", _C_DARK, fonte=_F_W10, ncols=6, height=22)
+    linha += 1
+    for ci, txt in [(3, "Recebivel Total"), (4, "Principal Total"), (5, "Juros Total")]:
+        ws.cell(linha, ci, txt).font = _F_B10
+    linha += 1
+    for ci, v in [(3, total_valor), (4, total_principal), (5, total_juros)]:
+        c = ws.cell(linha, ci, v if v != 0.0 else None)
+        c.font = Font(name="Calibri", size=11, bold=True, color="1A1916")
+        c.number_format = _FMT_RS
+        c.fill = _fill(_C_GREEN)
+    linha += 2
+
+    # Invariantes
+    dif_p = abs(total_principal - r["receita_nominal_venda"])
+    dif_j = abs(total_juros     - r["receita_financeira"])
+    ok_p  = "OK" if dif_p < 1.0 else f"DIVERGENCIA: {dif_p:,.0f}"
+    ok_j  = "OK" if dif_j < 1.0 else f"DIVERGENCIA: {dif_j:,.0f}"
+    ws.cell(linha,     1, f"Verificacao Principal = VGV Vendavel: {ok_p}").font = _F_B10
+    ws.cell(linha + 1, 1, f"Verificacao Juros = Rec. Financeira:  {ok_j}").font = _F_B10
+
+    ws.freeze_panes = "A4"
+
+
+# =====================================================================
+# 9. SIMULACAO DE 1 LOTE
+# =====================================================================
+
+def _aba_simulacao_lote(wb: Workbook, projeto: Projeto) -> None:
+    ws = wb.create_sheet("Simulacao Lote")
+    ws.column_dimensions["A"].width = 8
+    ws.column_dimensions["B"].width = 24
+    ws.column_dimensions["C"].width = 16
+    ws.column_dimensions["D"].width = 16
+    ws.column_dimensions["E"].width = 16
+    ws.column_dimensions["F"].width = 16
+
+    _hdr(ws, 1, 1, "SIMULACAO DE 1 LOTE POR TIPOLOGIA", _C_DARK,
+         fonte=_F_W11, ncols=6, height=24)
+
+    if not projeto.receitas.fluxos_recebiveis:
+        return
+    fluxo = projeto.receitas.fluxos_recebiveis[0]
+    mes_termino = meses_entre(
+        projeto.terreno.datas.inicio_projeto,
+        projeto.terreno.datas.termino_obras,
+    )
+    if projeto.receitas.curva_vendas:
+        primeira = projeto.receitas.curva_vendas[0]
+        mes_venda = (primeira.mes_inicio + primeira.mes_fim) // 2
+    else:
+        mes_venda = 0
+
+    linha = 3
+    ws.cell(linha, 1,
+            f"Fluxo: {fluxo.nome}  |  Mes de venda: M{mes_venda}  |  Termino obras: M{mes_termino}"
+            ).font = _F_B10
+    linha += 2
+
+    for tip in projeto.terreno.tipologias:
+        _hdr(ws, linha, 1, f"Tipologia: {tip.nome}  —  VGV/lote: R$ {int(tip.vgv_lote):,}".replace(",", "."),
+             _C_OCHRE, fonte=_F_W10, ncols=6, height=18)
+        linha += 1
+
+        for ci, txt in enumerate(["Mes", "Tipo", "Parcela (R$)", "Principal (R$)",
+                                   "Juros (R$)", "Saldo Devedor (R$)"], start=1):
+            c = ws.cell(linha, ci, txt)
+            c.font = _F_B10
+            c.fill = _fill(_C_STONE_D)
+        linha += 1
+
+        cron = simular_lote_unitario(tip.vgv_lote, fluxo, mes_venda, mes_termino)
+        for ev in cron:
+            ws.cell(linha, 1, ev["mes"]).number_format = _FMT_MES
+            ws.cell(linha, 2, ev["tipo"]).font = _F_N10
+            for ci, key in [(3, "valor"), (4, "principal"), (5, "juros"), (6, "saldo_devedor")]:
+                v = ev[key]
+                c = ws.cell(linha, ci, v if v != 0.0 else None)
+                c.number_format = _FMT_RS2
+                c.font = _F_N10
+                c.alignment = Alignment(horizontal="right")
+            linha += 1
+
+        # Totais
+        tp = sum(e["valor"]     for e in cron)
+        tpr = sum(e["principal"] for e in cron)
+        tj = sum(e["juros"]     for e in cron)
+        ws.cell(linha, 2, "TOTAL").font = _F_B10
+        for ci, v in [(3, tp), (4, tpr), (5, tj)]:
+            c = ws.cell(linha, ci, v if v != 0.0 else None)
+            c.font = _F_B10
+            c.number_format = _FMT_RS2
+            c.fill = _fill(_C_GREEN)
+            c.alignment = Alignment(horizontal="right")
+        linha += 2
+
+
+# =====================================================================
+# ENTRY POINT
+# =====================================================================
+
+def exportar_para_excel(
+    projeto: Projeto, resultado: ResultadoCalculo, caminho_saida: str | Path
+) -> None:
+    """Cria o arquivo Excel de auditoria completa."""
+    caminho_saida = Path(caminho_saida)
+    caminho_saida.parent.mkdir(parents=True, exist_ok=True)
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    _dashboard(wb, projeto, resultado)
+    _aba_terreno(wb, projeto, resultado)
+    _aba_receitas(wb, projeto, resultado)
+    _aba_obras(wb, projeto, resultado)
+    _aba_desenvolvimento(wb, projeto, resultado)
+    _aba_impostos(wb, projeto, resultado)
+    _aba_fluxo_caixa(wb, projeto, resultado)
+    _aba_verificacao_receitas(wb, projeto, resultado)
+    _aba_simulacao_lote(wb, projeto)
+
+    wb.save(caminho_saida)
