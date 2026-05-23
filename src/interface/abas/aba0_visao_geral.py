@@ -51,8 +51,6 @@ def renderizar() -> None:
             if resultado is not None:
                 try:
                     from ...io_projeto.exportar_html import gerar_relatorio_html
-                    import tempfile
-                    from pathlib import Path
                     nome_padrao = (
                         projeto.terreno.info.nome.lower()
                         .replace(" ", "_").replace("/", "_")
@@ -67,10 +65,10 @@ def renderizar() -> None:
                         type="primary",
                         help="Baixa HTML. Abra no navegador e pressione Ctrl+P para salvar como PDF.",
                     )
-                except Exception:
+                except Exception as e:
                     st.button("📄 Exportar PDF (Comite)",
                               use_container_width=True, type="primary",
-                              disabled=True, help="Calcule o projeto primeiro")
+                              disabled=True, help=f"Erro ao gerar relatorio: {e}")
             else:
                 st.button("📄 Exportar PDF (Comite)",
                           use_container_width=True, type="primary",

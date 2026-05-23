@@ -337,7 +337,11 @@ def atalhos_por_intervalos(
 
 def atalhos_contextuais(categoria: str, marcos: dict[int, str], horizonte: int) -> dict[str, dict[int, float]]:
     """
-    Devolve presets contextuais para uma categoria de despesa.
+    Devolve presets contextuais realistas para cada categoria de despesa.
+
+    Cada preset e nomeado pelo comportamento financeiro tipico do item
+    e vinculado aos marcos reais do projeto (aprovacao, obras, lancamento).
+    O usuario pode aplicar o preset e depois ajustar mes a mes.
 
     Args:
         categoria: 'projetos' | 'licenciamento' | 'marketing' | 'outros'
@@ -345,58 +349,146 @@ def atalhos_contextuais(categoria: str, marcos: dict[int, str], horizonte: int) 
         horizonte: horizonte total em meses
 
     Returns:
-        dict {nome_atalho: distribuicao}, ex.:
-        {"À vista no mês 0": {0: 100.0}, "Linear até a aprovação": {...}}
+        dict {nome_atalho: distribuicao}
     """
-    # Encontrar meses dos marcos
-    mes_aprovacao = next((m for m, n in marcos.items() if "Aprov" in n), None)
-    mes_lancamento = next((m for m, n in marcos.items() if "Lanc" in n), None)
+    mes_aprovacao    = next((m for m, n in marcos.items() if "Aprov"    in n), None)
+    mes_lancamento   = next((m for m, n in marcos.items() if "Lanc"     in n), None)
     mes_inicio_obras = next((m for m, n in marcos.items() if "Ini.Obras" in n or "Ini Obras" in n), None)
-    mes_fim_obras = next((m for m, n in marcos.items() if "Fim Obras" in n), None)
+    mes_fim_obras    = next((m for m, n in marcos.items() if "Fim Obras" in n), None)
+
+    def _lin(ini: int, fim: int, pct: float = 100.0) -> dict[int, float]:
+        ini = max(0, int(ini))
+        fim = max(ini, int(fim))
+        n   = fim - ini + 1
+        ppc = pct / n
+        r   = {ini + i: ppc for i in range(n)}
+        soma = sum(r.values())
+        if abs(soma - pct) > 1e-9:
+            r[fim] += pct - soma
+        return r
+
+    def _av(mes: int, pct: float = 100.0) -> dict[int, float]:
+        return {max(0, int(mes)): pct}
+
+    def _merge(*dists: dict) -> dict[int, float]:
+        r: dict[int, float] = {}
+        for d in dists:
+            for m, p in d.items():
+                r[m] = r.get(m, 0.0) + p
+        return r
 
     presets: dict[str, dict[int, float]] = {}
 
+    # ------------------------------------------------------------------
+    # PROJETOS TECNICOS
+    # Contratacao tipica: sinal no inicio + parcelas ate a entrega do produto.
+    # Topografia/sondagem: antes da aprovacao.
+    # Projeto urbanistico: M0 ate aprovacao.
+    # Projetos complementares: aprovacao ate inicio das obras.
+    # ------------------------------------------------------------------
     if categoria == "projetos":
-        presets["À vista no início (M0)"] = gerar_distribuicao_a_vista(0)
         if mes_aprovacao:
-            presets[f"Linear de M0 até aprovação (M{mes_aprovacao})"] = (
-                gerar_distribuicao_linear(0, mes_aprovacao)
+            m_meio = max(1, mes_aprovacao // 2)
+            presets[f"30% sinal (M0) + 70% linear ate aprovacao (M{mes_aprovacao})"] = _merge(
+                _av(0, 30.0),
+                _lin(1, mes_aprovacao, 70.0),
             )
+            presets[f"Sinal M0 + 50% no meio + entrega na aprovacao"] = _merge(
+                _av(0, 30.0),
+                _av(m_meio, 40.0),
+                _av(mes_aprovacao, 30.0),
+            )
+            presets[f"Linear de M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
+        if mes_aprovacao and mes_inicio_obras and mes_inicio_obras > mes_aprovacao:
+            presets[f"Linear: aprovacao ate inicio das obras (M{mes_aprovacao}–M{mes_inicio_obras})"] = (
+                _lin(mes_aprovacao, mes_inicio_obras)
+            )
+            presets[f"50% na aprovacao + 50% no inicio das obras (M{mes_inicio_obras})"] = _merge(
+                _av(mes_aprovacao, 50.0),
+                _av(mes_inicio_obras, 50.0),
+            )
+        presets["A vista no inicio (M0)"] = _av(0)
 
+    # ------------------------------------------------------------------
+    # LICENCIAMENTO E TAXAS
+    # LP (Licenca Previa): antes da aprovacao — maior parte dos custos.
+    # LI (Licenca de Instalacao): aprovacao ate inicio das obras.
+    # LO (Licenca de Operacao): termino das obras.
+    # Aprovacao prefeitura: distribuida de M0 ate aprovacao.
+    # Registro cartorio: apos aprovacao, antes do lancamento.
+    # Medida compensatoria: condicao de LP/LI, paga na aprovacao.
+    # ------------------------------------------------------------------
     elif categoria == "licenciamento":
-        if mes_aprovacao:
-            presets[f"À vista na aprovação (M{mes_aprovacao})"] = (
-                gerar_distribuicao_a_vista(mes_aprovacao)
+        if mes_aprovacao and mes_inicio_obras and mes_fim_obras:
+            m_lp_fim = max(0, mes_aprovacao - 1)
+            m_li_fim = max(mes_aprovacao, mes_inicio_obras - 1)
+            presets["LP/LI/LO: 50% ate aprovacao + 30% ate obras + 20% no termino"] = _merge(
+                _lin(0,            m_lp_fim,      50.0),
+                _lin(mes_aprovacao, m_li_fim,      30.0),
+                _av(mes_fim_obras,                 20.0),
             )
-            presets[f"Linear de M0 a M{mes_aprovacao}"] = (
-                gerar_distribuicao_linear(0, mes_aprovacao)
+        if mes_aprovacao:
+            m_ate_obras = mes_inicio_obras or (mes_aprovacao + 6)
+            presets[f"Linear de M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
+            presets[f"60% na aprovacao + 40% linear ate inicio das obras"] = _merge(
+                _av(mes_aprovacao, 60.0),
+                _lin(mes_aprovacao + 1, max(mes_aprovacao + 1, m_ate_obras), 40.0),
+            )
+            presets[f"A vista na aprovacao (M{mes_aprovacao})"] = _av(mes_aprovacao)
+        if mes_aprovacao and mes_lancamento and mes_lancamento > mes_aprovacao:
+            presets[f"Aprovacao ao lancamento (M{mes_aprovacao}–M{mes_lancamento})"] = (
+                _lin(mes_aprovacao, mes_lancamento)
             )
         if mes_inicio_obras:
-            presets[f"À vista no início das obras (M{mes_inicio_obras})"] = (
-                gerar_distribuicao_a_vista(mes_inicio_obras)
-            )
+            presets[f"A vista no inicio das obras (M{mes_inicio_obras})"] = _av(mes_inicio_obras)
+        if mes_fim_obras:
+            presets[f"A vista no termino das obras (M{mes_fim_obras})"] = _av(mes_fim_obras)
 
+    # ------------------------------------------------------------------
+    # MARKETING E VENDAS
+    # Pre-lancamento: preparacao do stand e material (1-2 meses antes).
+    # Lancamento: pico de investimento.
+    # Sustentacao: publicidade diluida durante o periodo de vendas (obras).
+    # ------------------------------------------------------------------
     elif categoria == "marketing":
         if mes_lancamento and mes_fim_obras:
-            presets[f"Linear do lançamento (M{mes_lancamento}) ao fim das obras (M{mes_fim_obras})"] = (
-                gerar_distribuicao_linear(mes_lancamento, mes_fim_obras)
+            m_pre = max(0, mes_lancamento - 2)
+            presets[f"20% pre-lancamento + 80% durante obras (M{mes_lancamento}–M{mes_fim_obras})"] = _merge(
+                _lin(m_pre, max(m_pre, mes_lancamento - 1), 20.0),
+                _lin(mes_lancamento, mes_fim_obras, 80.0),
+            )
+            presets[f"30% no lancamento + 70% diluido ate fim das obras"] = _merge(
+                _av(mes_lancamento, 30.0),
+                _lin(mes_lancamento + 1, mes_fim_obras, 70.0) if mes_fim_obras > mes_lancamento else {},
+            )
+            presets[f"Linear: lancamento ate fim das obras (M{mes_lancamento}–M{mes_fim_obras})"] = (
+                _lin(mes_lancamento, mes_fim_obras)
+            )
+            presets[f"Intenso no lancamento: 50% + 50% restante diluido"] = _merge(
+                _av(mes_lancamento, 50.0),
+                _lin(mes_lancamento + 1, mes_fim_obras, 50.0) if mes_fim_obras > mes_lancamento else {},
             )
         if mes_lancamento:
-            # Lançamento concentrado: 30% no lançamento, 70% diluído
-            distrib_lanc = {mes_lancamento: 30.0}
-            if mes_fim_obras and mes_fim_obras > mes_lancamento:
-                qtd = mes_fim_obras - mes_lancamento
-                pct_diluido = 70.0 / qtd
-                for i in range(1, qtd + 1):
-                    distrib_lanc[mes_lancamento + i] = pct_diluido
-            presets[f"30% no lançamento + 70% diluído"] = distrib_lanc
+            presets[f"A vista no lancamento (M{mes_lancamento})"] = _av(mes_lancamento)
 
+    # ------------------------------------------------------------------
+    # OUTRAS DESPESAS
+    # Assessoria juridica: acompanhamento continuo M0 ate fim das obras.
+    # Gestao/incorporadora: similar.
+    # Outros pontuais: a vista em marcos.
+    # ------------------------------------------------------------------
     elif categoria == "outros":
-        presets["À vista no início (M0)"] = gerar_distribuicao_a_vista(0)
-        if mes_lancamento:
-            presets[f"À vista no lançamento (M{mes_lancamento})"] = (
-                gerar_distribuicao_a_vista(mes_lancamento)
+        if mes_fim_obras:
+            presets[f"Linear: M0 ate fim das obras (M{mes_fim_obras})"] = _lin(0, mes_fim_obras)
+        if mes_aprovacao and mes_fim_obras:
+            presets[f"Linear: aprovacao ate fim das obras (M{mes_aprovacao}–M{mes_fim_obras})"] = (
+                _lin(mes_aprovacao, mes_fim_obras)
             )
+        if mes_aprovacao:
+            presets[f"Linear: M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
+        if mes_lancamento:
+            presets[f"A vista no lancamento (M{mes_lancamento})"] = _av(mes_lancamento)
+        presets["A vista no inicio (M0)"] = _av(0)
 
     return presets
 

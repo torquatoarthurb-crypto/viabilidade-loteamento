@@ -16,6 +16,7 @@ from ...engine import calcular_fluxo_caixa
 from ..helpers import (
     cabecalho_aba,
     formatar_brl,
+    formatar_num,
     formatar_pct,
     get_projeto,
     get_resultado,
@@ -30,6 +31,7 @@ def renderizar() -> None:
         "Sensibilidade, solvers de Margem Liquida alvo, benchmarks de mercado e simulador de faseamento.",
     )
     tabs = st.tabs([
+        "🤝 Negociacao",
         "📊 Sensibilidade",
         "🎯 Preco Minimo",
         "🏗️ Terreno Maximo",
@@ -37,14 +39,16 @@ def renderizar() -> None:
         "🔀 Faseamento",
     ])
     with tabs[0]:
-        _renderizar_sensibilidade()
+        _renderizar_calculadora_negociacao()
     with tabs[1]:
-        _renderizar_solver_preco()
+        _renderizar_sensibilidade()
     with tabs[2]:
-        _renderizar_solver_terreno()
+        _renderizar_solver_preco()
     with tabs[3]:
-        _renderizar_benchmarks()
+        _renderizar_solver_terreno()
     with tabs[4]:
+        _renderizar_benchmarks()
+    with tabs[5]:
         _renderizar_faseamento()
 
 
@@ -271,7 +275,7 @@ def _renderizar_solver_preco() -> None:
     with col1:
         margem_alvo_pct = st.number_input(
             "Margem Liquida alvo (%)",
-            min_value=1.0, max_value=100.0,
+            min_value=1.0, max_value=500.0,
             value=float(f"{max(margem_pct_base, 20.0):.1f}"),
             step=0.5,
             key="solver_preco_margem_alvo",
@@ -307,7 +311,7 @@ def _renderizar_solver_preco() -> None:
     )
     vgv_atual = resultado.resumo.get("vgv_bruto", 0) or 1
 
-    col1, col2, col3 = st.columns(3)
+    col2, col3 = st.columns(2)
     col2.metric("VGV com preco minimo", formatar_brl(vgv_novo))
     col3.metric("Variacao vs VGV atual",
                 f"{(vgv_novo / vgv_atual - 1) * 100:+.1f}%")
@@ -384,7 +388,7 @@ def _renderizar_solver_terreno() -> None:
     with col1:
         margem_alvo_pct = st.number_input(
             "Margem Liquida minima aceitavel (%)",
-            min_value=1.0, max_value=100.0,
+            min_value=1.0, max_value=500.0,
             value=float(f"{max(margem_pct_base, 20.0):.1f}"),
             step=0.5,
             key="solver_terreno_margem_alvo",
@@ -455,6 +459,413 @@ def _bisecao_terreno(projeto, margem_alvo: float, lo: float = 0.01, hi: float = 
         else:
             hi = mid
     return (lo + hi) / 2
+
+
+# =====================================================================
+# CALCULADORA DE NEGOCIACAO — HELPERS
+# =====================================================================
+
+def _run_margem_bruta(projeto) -> float | None:
+    """Retorna Margem Liquida (resultado / vgv_vendavel). None se falhar."""
+    try:
+        res = calcular_fluxo_caixa(projeto)
+        return res.resumo.get("margem_sobre_vgv_vendavel")
+    except Exception:
+        return None
+
+
+def _variar_velocidade(projeto, n_meses_vendas: int):
+    """Redistribui a curva de vendas uniformemente em n_meses_vendas meses."""
+    from ...modelos.receitas import FaixaCurvaVendas
+    receitas = projeto.receitas
+    if not receitas.curva_vendas or not receitas.fluxos_recebiveis:
+        return projeto
+    inicio = min(f.mes_inicio for f in receitas.curva_vendas)
+    fluxo_nome = receitas.fluxos_recebiveis[0].nome
+    n = max(1, int(n_meses_vendas))
+    pct_mes = 100.0 / n
+    novas_faixas = []
+    for i in range(n):
+        try:
+            novas_faixas.append(FaixaCurvaVendas(
+                mes_inicio=inicio + i,
+                mes_fim=inicio + i,
+                percentual_estoque=pct_mes,
+                fluxo_recebiveis=fluxo_nome,
+            ))
+        except Exception:
+            pass
+    if not novas_faixas:
+        return projeto
+    return projeto.model_copy(
+        update={"receitas": receitas.model_copy(update={"curva_vendas": novas_faixas})}
+    )
+
+
+def _bisec_neg(fn_run, fn_variar, projeto, margem_alvo, lo, hi,
+               crescente=True, max_iter=60):
+    """Bissecao generica: crescente=True quando parametro maior -> margem maior."""
+    m_lo = fn_run(fn_variar(projeto, lo))
+    m_hi = fn_run(fn_variar(projeto, hi))
+    if m_lo is None or m_hi is None:
+        return None
+    if crescente:
+        if margem_alvo <= m_lo:
+            return lo
+        if margem_alvo > m_hi:
+            return None
+    else:
+        if margem_alvo > m_lo:
+            return None
+        if margem_alvo <= m_hi:
+            return hi
+    for _ in range(max_iter):
+        mid = (lo + hi) / 2
+        m_mid = fn_run(fn_variar(projeto, mid))
+        if m_mid is None:
+            return None
+        if abs(m_mid - margem_alvo) < 0.0001:
+            return mid
+        if crescente:
+            if m_mid < margem_alvo:
+                lo = mid
+            else:
+                hi = mid
+        else:
+            if m_mid > margem_alvo:
+                lo = mid
+            else:
+                hi = mid
+    return (lo + hi) / 2
+
+
+def _bisec_velocidade(projeto, margem_alvo, lo_m=1, hi_m=120):
+    """Encontra o prazo maximo de vendas (meses) que ainda atinge margem_alvo."""
+    m_lo = _run_margem_bruta(_variar_velocidade(projeto, lo_m))
+    if m_lo is None or m_lo < margem_alvo:
+        return None
+    m_hi = _run_margem_bruta(_variar_velocidade(projeto, hi_m))
+    if m_hi is not None and m_hi >= margem_alvo:
+        return hi_m  # velocidade de vendas praticamente irrelevante para a margem
+    for _ in range(40):
+        mid = (lo_m + hi_m) // 2
+        if mid == lo_m:
+            break
+        m_mid = _run_margem_bruta(_variar_velocidade(projeto, mid))
+        if m_mid is None:
+            hi_m = mid
+            continue
+        if m_mid >= margem_alvo:
+            lo_m = mid
+        else:
+            hi_m = mid
+    return lo_m
+
+
+# =====================================================================
+# CALCULADORA DE NEGOCIACAO — INTERFACE
+# =====================================================================
+
+def _renderizar_calculadora_negociacao() -> None:
+    st.markdown("#### Calculadora de Negociacao")
+    st.caption(
+        "Dado uma Margem Liquida alvo (Resultado / VGV Vendavel), calcula simultaneamente: "
+        "o preco minimo de venda, o custo maximo de obras, o valor maximo do terreno "
+        "e o prazo maximo de vendas. Util para reunioes de negociacao com landowners e construtoras."
+    )
+
+    resultado = get_resultado()
+    if resultado is None:
+        renderizar_calcular_cta()
+        return
+
+    projeto = get_projeto()
+    margem_base = resultado.resumo.get("margem_sobre_vgv_vendavel")
+    margem_pct_base = (margem_base or 0.0) * 100
+
+    col_inp, col_atual = st.columns([2, 1])
+    with col_inp:
+        margem_alvo_pct = st.number_input(
+            "Margem Liquida alvo — Resultado / VGV Vendavel (%)",
+            min_value=1.0,
+            max_value=500.0,
+            value=float(f"{max(margem_pct_base, 20.0):.1f}"),
+            step=0.5,
+            key="neg_margem_alvo",
+            help=(
+                "Resultado liquido do empreendimento dividido pelo VGV Vendavel (apos permuta fisica). "
+                "Tipico de loteamentos: 18–30%."
+            ),
+        )
+    with col_atual:
+        st.metric(
+            "Margem Liquida atual",
+            f"{margem_pct_base:.1f}%" if margem_base is not None else "—",
+            help="Resultado / VGV Vendavel do projeto calculado.",
+        )
+
+    calcular = st.button("▶ Calcular Todos", key="btn_neg_calcular", type="primary",
+                         use_container_width=True)
+
+    cache = st.session_state.get("_neg_cache")
+
+    if calcular:
+        margem_alvo = margem_alvo_pct / 100
+        resultados: dict = {}
+
+        with st.spinner("Calculando solvers simultaneamente..."):
+            # Solver 1: preco minimo (fator sobre valor_unitario de todas as tipologias)
+            fator_preco = _bisec_neg(
+                _run_margem_bruta, _variar_preco, projeto,
+                margem_alvo, lo=0.05, hi=15.0, crescente=True,
+            )
+            resultados["preco"] = fator_preco
+
+            # Solver 2: custo maximo de obras (fator inverso — obras menores -> margem maior)
+            fator_obras = _bisec_neg(
+                _run_margem_bruta, _variar_obras, projeto,
+                margem_alvo, lo=0.01, hi=10.0, crescente=False,
+            )
+            resultados["obras"] = fator_obras
+
+            # Solver 3: terreno maximo (fator inverso — terreno maior -> margem menor)
+            fator_terreno = _bisec_neg(
+                _run_margem_bruta, _variar_terreno, projeto,
+                margem_alvo, lo=0.01, hi=30.0, crescente=False,
+            )
+            resultados["terreno"] = fator_terreno
+
+            # Solver 4: prazo maximo de vendas (meses; mais meses = TVM pior, mas margem nominal quase inalterada)
+            meses_max = _bisec_velocidade(projeto, margem_alvo, lo_m=1, hi_m=120)
+            resultados["velocidade"] = meses_max
+
+        st.session_state["_neg_cache"] = {
+            "resultados": resultados,
+            "margem_alvo_pct": margem_alvo_pct,
+            "margem_base_pct": margem_pct_base,
+            "projeto_snapshot": {
+                "valor_unitario_base": {t.nome: t.valor_unitario for t in projeto.terreno.tipologias},
+                "custo_obras": sum(
+                    e.valor_total for e in projeto.obras.etapas
+                ) if projeto.obras.modo == "detalhado" and projeto.obras.etapas
+                else (projeto.obras.resumido.valor_por_m2 if projeto.obras.resumido else 0),
+                "valor_terreno": projeto.aquisicao.valor_total,
+                "vgv_bruto": resultado.resumo.get("vgv_vendavel", resultado.resumo.get("vgv_bruto", 0)),
+            },
+        }
+        cache = st.session_state["_neg_cache"]
+
+    if cache:
+        _mostrar_resultados_neg(projeto, resultado, cache)
+
+
+def _mostrar_resultados_neg(projeto, resultado, cache: dict) -> None:
+    resultados = cache["resultados"]
+    margem_alvo_pct = cache["margem_alvo_pct"]
+    snap = cache.get("projeto_snapshot", {})
+
+    vgv_bruto = snap.get("vgv_bruto") or resultado.resumo.get("vgv_bruto") or 1.0
+    valor_terreno_atual = projeto.aquisicao.valor_total
+    areas = projeto.terreno.areas
+    gleba_m2 = areas.area_gleba_m2 or 1.0
+    lotes_m2 = areas.area_lotes_m2 or 1.0
+
+    st.markdown(f"---\n##### Resultados para Margem Liquida alvo = **{margem_alvo_pct:.1f}%**")
+
+    c1, c2 = st.columns(2)
+    c3, c4 = st.columns(2)
+
+    # --- Preco minimo ---
+    fator_preco = resultados.get("preco")
+    with c1:
+        st.markdown("**Preco Minimo de Venda**")
+        if fator_preco is None:
+            st.error("Nao atingivel\n\nNenhum preco de venda garante essa margem com os custos atuais.")
+        else:
+            variacao_preco = (fator_preco - 1) * 100
+            vgv_novo = sum(
+                t.quantidade
+                * (t.area_lote_m2 if t.modo_preco == "por_m2" else 1)
+                * t.valor_unitario
+                * (1 + t.gio_percentual / 100)
+                * fator_preco
+                for t in projeto.terreno.tipologias
+            )
+            cor = "normal" if variacao_preco <= 0 else "inverse"
+            st.metric(
+                "Ajuste necessario",
+                f"{variacao_preco:+.1f}% nos precos",
+                delta=formatar_brl(vgv_novo - vgv_bruto),
+                delta_color=cor,
+                help="Variacao percentual uniforme sobre os precos atuais de todas as tipologias.",
+            )
+            if fator_preco < 1:
+                st.success(f"Pode reduzir ate {abs(variacao_preco):.1f}% e ainda manter a margem.")
+            else:
+                st.warning(f"Precisa aumentar {variacao_preco:.1f}% para atingir a margem.")
+            linhas_preco = ""
+            for t in projeto.terreno.tipologias:
+                novo_val = t.valor_unitario * fator_preco
+                un = "m²" if t.modo_preco == "por_m2" else "lote"
+                linhas_preco += (
+                    f"<tr><td>{t.nome}</td>"
+                    f"<td>{formatar_brl(t.valor_unitario)}/{un}</td>"
+                    f"<td style='color:#34D399'>{formatar_brl(novo_val)}/{un}</td></tr>"
+                )
+            if linhas_preco:
+                st.markdown(
+                    '<table class="dre-table"><thead><tr>'
+                    "<th>Tipologia</th><th>Atual</th><th>Minimo</th>"
+                    f"</tr></thead><tbody>{linhas_preco}</tbody></table>",
+                    unsafe_allow_html=True,
+                )
+
+    # --- Custo maximo de obras ---
+    fator_obras = resultados.get("obras")
+    with c2:
+        st.markdown("**Custo Maximo de Obras**")
+        if fator_obras is None:
+            st.error("Nao atingivel\n\nMesmo zerando as obras a margem nao e alcancada. Revise precos ou terreno.")
+        else:
+            obras = projeto.obras
+            if obras.modo == "resumido" and obras.resumido:
+                custo_atual = obras.resumido.valor_por_m2 * (
+                    areas.area_sistema_viario_m2
+                    if obras.resumido.base_calculo == "sistema_viario"
+                    else areas.area_lotes_m2
+                )
+            else:
+                custo_atual = sum(e.valor_total for e in obras.etapas) if obras.etapas else 0.0
+            custo_max = custo_atual * fator_obras
+            variacao_obras = (fator_obras - 1) * 100
+            st.metric(
+                "Custo maximo total",
+                formatar_brl(custo_max),
+                delta=f"{variacao_obras:+.1f}% vs atual",
+                delta_color="normal",
+            )
+            if fator_obras >= 1:
+                st.success(f"Obras podem custar ate {variacao_obras:+.1f}% a mais.")
+            else:
+                st.warning(f"Obras precisam custar {abs(variacao_obras):.1f}% menos.")
+            st.caption(
+                f"Atual: {formatar_brl(custo_atual)}\n\n"
+                f"Maximo: {formatar_brl(custo_max)} "
+                f"(R$ {formatar_num(custo_max / lotes_m2, 0)}/m² lotes)"
+            )
+
+    # --- Terreno maximo ---
+    fator_terreno = resultados.get("terreno")
+    with c3:
+        st.markdown("**Valor Maximo do Terreno**")
+        if fator_terreno is None:
+            st.error("Nao atingivel\n\nMesmo com terreno a R$ 0 a margem nao e alcancada. Revise precos ou obras.")
+        else:
+            valor_max_terreno = valor_terreno_atual * fator_terreno
+            variacao_terreno = (fator_terreno - 1) * 100
+            st.metric(
+                "Valor maximo total",
+                formatar_brl(valor_max_terreno),
+                delta=f"{variacao_terreno:+.1f}% vs atual",
+                delta_color="normal",
+            )
+            if fator_terreno >= 1:
+                st.success(f"Terreno pode custar ate {variacao_terreno:+.1f}% a mais.")
+            else:
+                st.warning(f"Terreno precisa custar {abs(variacao_terreno):.1f}% menos.")
+            st.caption(
+                f"Atual: {formatar_brl(valor_terreno_atual)} "
+                f"({formatar_brl(valor_terreno_atual / gleba_m2)}/m² gleba)\n\n"
+                f"Maximo: {formatar_brl(valor_max_terreno)} "
+                f"({formatar_brl(valor_max_terreno / gleba_m2)}/m² gleba | "
+                f"R$ {formatar_num(valor_max_terreno / lotes_m2, 0)}/m² lotes)"
+            )
+
+    # --- Velocidade de vendas ---
+    meses_max = resultados.get("velocidade")
+    with c4:
+        st.markdown("**Prazo Maximo de Vendas**")
+        if meses_max is None:
+            st.error("Nem com 1 mes de vendas a margem e alcancada. Revise precos e custos.")
+        elif meses_max >= 120:
+            st.info(
+                "Velocidade praticamente irrelevante.\n\n"
+                "A Margem Bruta (nominal) nao depende do ritmo de vendas — "
+                "TVM afeta o VPL/TIR, nao a margem sobre VGV."
+            )
+        else:
+            st.metric(
+                "Prazo maximo",
+                f"{meses_max} meses",
+                help="Prazo maximo de absorção do estoque com venda uniforme mensal.",
+            )
+            if meses_max >= 36:
+                st.success(f"Ate {meses_max} meses de vendas mantendo a margem.")
+            else:
+                st.warning(f"Vendas precisam ser concluidas em ate {meses_max} meses.")
+            st.caption(
+                f"Velocidade implicita: {100.0 / meses_max:.1f}% do estoque/mes "
+                f"({meses_max} meses ate venda completa)"
+            )
+
+    # Tabela resumo
+    st.markdown("---")
+    st.markdown("##### Resumo dos Solvers")
+
+    def _status(ok: bool | None) -> str:
+        if ok is None:
+            return "❌ Nao atingivel"
+        return "✅ Atingivel"
+
+    def _delta_str(fator) -> str:
+        if fator is None:
+            return "—"
+        return f"{(fator - 1) * 100:+.1f}%"
+
+    linhas_res = (
+        f"<tr><td><b>Preco minimo de venda</b></td>"
+        f"<td>{_status(fator_preco)}</td>"
+        f"<td>{_delta_str(fator_preco)} sobre precos atuais</td></tr>"
+
+        f"<tr><td><b>Custo maximo de obras</b></td>"
+        f"<td>{_status(fator_obras)}</td>"
+        f"<td>{_delta_str(fator_obras)} sobre custo atual</td></tr>"
+
+        f"<tr><td><b>Valor maximo do terreno</b></td>"
+        f"<td>{_status(fator_terreno)}</td>"
+        f"<td>{_delta_str(fator_terreno)} sobre valor atual</td></tr>"
+    )
+    if meses_max is None:
+        linhas_res += (
+            "<tr><td><b>Prazo maximo de vendas</b></td>"
+            "<td>❌ Nao atingivel</td><td>—</td></tr>"
+        )
+    elif meses_max >= 120:
+        linhas_res += (
+            "<tr><td><b>Prazo maximo de vendas</b></td>"
+            "<td>ℹ️ Irrelevante</td>"
+            "<td>Margem bruta independe da velocidade de vendas</td></tr>"
+        )
+    else:
+        linhas_res += (
+            f"<tr><td><b>Prazo maximo de vendas</b></td>"
+            f"<td>✅ Atingivel</td>"
+            f"<td>Ate {meses_max} meses ({100.0/meses_max:.1f}%/mes)</td></tr>"
+        )
+
+    thead_res = (
+        "<thead><tr>"
+        "<th>Solver</th><th>Status</th><th>Resultado</th>"
+        "</tr></thead>"
+    )
+    st.markdown(
+        f'<table class="dre-table">{thead_res}<tbody>{linhas_res}</tbody></table>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Margem Bruta = Resultado / VGV Maximo (VGV Bruto antes da permuta fisica). "
+        "Cada solver varia apenas um parametro de cada vez mantendo os demais fixos."
+    )
 
 
 # =====================================================================
@@ -559,15 +970,18 @@ def _mostrar_posicao_benchmarks(projeto, resultado) -> None:
         ("Comissao", f"{comissao:.1f}%", cor_faixa(comissao, 5, 6)),
     ]
 
-    cols = st.columns(len(dados))
-    for col, (nome, valor, cor) in zip(cols, dados):
-        col.markdown(
-            f'<div style="background:#131822;border-radius:8px;padding:10px 6px;text-align:center;">'
-            f'<div style="font-size:9px;color:#9CA3AF;margin-bottom:3px;">{nome}</div>'
-            f'<div style="font-size:15px;font-weight:700;color:{cor}">{valor}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    _card_html = (
+        lambda nome, valor, cor:
+        f'<div style="background:#131822;border-radius:8px;padding:10px 8px;text-align:center;">'
+        f'<div style="font-size:10px;color:#9CA3AF;margin-bottom:4px;">{nome}</div>'
+        f'<div style="font-size:16px;font-weight:700;color:{cor}">{valor}</div>'
+        f'</div>'
+    )
+    n_por_linha = 4
+    for offset in range(0, len(dados), n_por_linha):
+        grupo = dados[offset:offset + n_por_linha]
+        for col, (nome, valor, cor) in zip(st.columns(len(grupo)), grupo):
+            col.markdown(_card_html(nome, valor, cor), unsafe_allow_html=True)
     st.caption("Verde = dentro do tipico de mercado | Amarelo = fora do tipico (pode ser ok para o seu contexto)")
 
 

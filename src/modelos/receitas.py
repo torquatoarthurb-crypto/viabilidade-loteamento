@@ -90,6 +90,10 @@ class FaixaCurvaVendas(BaseModel):
         ..., ge=0, le=100, description="% do estoque vendido nesta faixa (distribuido linearmente)"
     )
     fluxo_recebiveis: str = Field(..., description="Nome do FluxoRecebiveis a aplicar")
+    fator_preco: float = Field(
+        default=1.0, gt=0,
+        description="Multiplicador de preco nesta faixa. Ex.: 0.95 = -5% (lancamento), 1.10 = +10% (estoque). Retrocompat: 1.0 = preco padrao.",
+    )
 
     @model_validator(mode="after")
     def _valida(self) -> "FaixaCurvaVendas":

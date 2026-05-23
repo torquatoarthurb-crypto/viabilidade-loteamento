@@ -103,6 +103,14 @@ def _renderizar_opcao_direta(projeto, horizonte, marcos) -> dict:
             key="ater_cartorio",
             min_value=0.0,
         )
+        # U5: valor por m² de gleba e por m² de lotes (unidade que o mercado negocia)
+        _a_gleba = float(projeto.terreno.areas.area_gleba_m2) or 1.0
+        _a_lotes = float(projeto.terreno.areas.area_lotes_m2) or 1.0
+        from ..helpers import formatar_num as _fmt_n
+        st.caption(
+            f"≈ **R$ {_fmt_n(valor_total / _a_gleba, 2)}/m² de gleba** | "
+            f"R$ {_fmt_n(valor_total / _a_lotes, 2)}/m² de lotes"
+        )
     with col2:
         mes_cartorio = numero_brl(
             "Mes do cartorio / registro (M0 = mes inicial)",
@@ -408,9 +416,7 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
     )
 
     def _vgv_tip(t) -> float:
-        if t.modo_preco == "por_m2":
-            return t.quantidade * t.area_lote_m2 * t.valor_unitario
-        return t.quantidade * t.valor_unitario
+        return t.vgv_total  # usa a propriedade do modelo, que ja aplica o agio
 
     mapa_atual = {p.tipologia: p.percentual for p in projeto.receitas.permuta_fisica}
 

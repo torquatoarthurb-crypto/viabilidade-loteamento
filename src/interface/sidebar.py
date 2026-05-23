@@ -53,7 +53,12 @@ def _limpar_estado_abas() -> None:
         # Ferramentas analiticas (resultados ficam obsoletos ao trocar projeto)
         "_sens_cache",
         "_mc_resultados",
+        "_neg_cache",
         "historico_versoes",
+        # Preco progressivo
+        "aba2_fatores_preco",
+        "aba2_preco_progressivo_ativo",
+        "aba2_preco_bandas",
     ]
     for chave in chaves_para_limpar:
         if chave in st.session_state:
@@ -71,7 +76,7 @@ def renderizar_sidebar_acoes() -> None:
     # Botao "Meus Projetos" e usuario logado
     if usuario:
         nome_usuario = usuario.get("nome", "Usuário")
-        col_u, col_sair = st.sidebar.columns([3, 1])
+        col_u, col_sair = st.sidebar.columns([2, 1])
         with col_u:
             if st.button(
                 "← Meus Projetos",
@@ -135,6 +140,7 @@ def renderizar_sidebar_acoes() -> None:
                             usuario_calc["email"],
                             projeto_atual.terreno.info.nome,
                             resultado,
+                            projeto_atual,
                         )
                     except Exception:
                         pass

@@ -21,7 +21,7 @@ from ..helpers import (
     set_projeto,
 )
 
-def _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof) -> None:
+def _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo) -> None:
     try:
         nova = ConfigFinanciamento(
             ativo=ativo,
@@ -31,6 +31,7 @@ def _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof) -> None:
             periodo_carencia_meses=int(carencia),
             comissao_abertura_pct=comissao,
             iof_pct=iof,
+            caixa_minimo=caixa_minimo,
         )
         if projeto.financiamento != nova:
             set_projeto(projeto.model_copy(update={"financiamento": nova}))
@@ -161,6 +162,30 @@ def renderizar() -> None:
     st.markdown("---")
 
     # ============================================================
+    # TAXA DE JUROS — sempre visivel (usada na previsao do Dashboard)
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("#### 💰 Taxa de juros do financiamento")
+        st.caption(
+            "A taxa abaixo fica sempre visível e alimenta a **estimativa do Dashboard**, "
+            "mesmo quando o financiamento está desativado. "
+            "Típico: CDI + 3–6% a.a. ≈ 1,5–2,0% a.m."
+        )
+        col_t, col_eq = st.columns(2)
+        with col_t:
+            taxa = numero_brl(
+                "Taxa de juros (% a.m.)",
+                value=float(fin.taxa_juros_am),
+                key="fin_taxa",
+                min_value=0.0,
+                max_value=10.0,
+                help="Taxa mensal efetiva cobrada sobre o saldo devedor.",
+            )
+        with col_eq:
+            taxa_aa = (1 + taxa / 100) ** 12 - 1
+            st.metric("Equivalência anual", f"{taxa_aa * 100:.2f}% a.a.")
+
+    # ============================================================
     # TOGGLE PRINCIPAL
     # ============================================================
     ativo = st.toggle(
@@ -177,11 +202,12 @@ def renderizar() -> None:
     if not ativo:
         st.info(
             "Ative o financiamento para simular o impacto de uma linha de crédito "
-            "bancária na viabilidade do projeto."
+            "bancária na viabilidade do projeto. "
+            "A taxa configurada acima já aparece como estimativa no Dashboard."
         )
-        _autosave(projeto, False, fin.taxa_juros_am,
+        _autosave(projeto, False, taxa,
                   fin.limite_credito_valor, fin.periodo_carencia_meses,
-                  fin.comissao_abertura_pct, fin.iof_pct)
+                  fin.comissao_abertura_pct, fin.iof_pct, fin.caixa_minimo)
         btn_proximo_modulo("Reajustes")
         return
 
@@ -189,19 +215,11 @@ def renderizar() -> None:
     # CARD 1 — CONFIGURACAO DA LINHA DE CREDITO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🏦 Configuração da linha de crédito — CCB/CCE")
-        st.caption("Taxa típica: CDI + 3–6% a.a. (~1,5–2,0% a.m.). Disponível em bancos privados com menos burocracia.")
+        st.markdown("#### 🏦 Configuração completa da linha de crédito — CCB/CCE")
+        st.caption("Limite, carência, comissão e IOF da operação bancária.")
 
         col1, col2 = st.columns(2)
         with col1:
-            taxa = numero_brl(
-                "Taxa de juros (% a.m.)",
-                value=float(fin.taxa_juros_am),
-                key="fin_taxa",
-                min_value=0.0,
-                max_value=10.0,
-                help="Taxa mensal efetiva cobrada sobre o saldo devedor.",
-            )
             limite = numero_brl(
                 "Limite da linha de crédito (R$) — 0 = sem limite",
                 value=float(fin.limite_credito_valor),
@@ -211,6 +229,14 @@ def renderizar() -> None:
                     "Valor máximo que pode ser sacado. "
                     "Use 0 para simular crédito ilimitado (sem restrição de teto)."
                 ),
+            )
+            comissao = numero_brl(
+                "Comissão de abertura (% sobre o limite)",
+                value=float(fin.comissao_abertura_pct),
+                key="fin_comissao",
+                min_value=0.0,
+                max_value=5.0,
+                help="Cobrada no M0 sobre o valor do limite contratado.",
             )
         with col2:
             carencia = numero_brl(
@@ -222,29 +248,51 @@ def renderizar() -> None:
                 casas=0,
                 help="Meses iniciais sem amortização de principal. Juros continuam sendo cobrados.",
             )
-            comissao = numero_brl(
-                "Comissão de abertura (% sobre o limite)",
-                value=float(fin.comissao_abertura_pct),
-                key="fin_comissao",
+            iof = numero_brl(
+                "IOF sobre cada saque (%)",
+                value=float(fin.iof_pct),
+                key="fin_iof",
                 min_value=0.0,
                 max_value=5.0,
-                help="Cobrada no M0 sobre o valor do limite contratado.",
+                help="Percentual adicionado ao saldo devedor a cada saque.",
             )
 
-        iof = numero_brl(
-            "IOF sobre cada saque (%)",
-            value=float(fin.iof_pct),
-            key="fin_iof",
-            min_value=0.0,
-            max_value=5.0,
-            help="Percentual adicionado ao saldo devedor a cada saque.",
+    # ============================================================
+    # CARD 2 — CAIXA MINIMO (reserva operacional)
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("#### 🛡️ Reserva de caixa mínimo")
+        st.caption(
+            "Define um piso de caixa que o sistema mantém disponível o tempo todo. "
+            "O banco saca para cobrir qualquer queda abaixo desse valor (não só quando o caixa vai a zero). "
+            "E só amortiza o que exceder essa reserva — nunca usa a reserva para quitar dívida."
         )
 
-        taxa_aa = (1 + taxa / 100) ** 12 - 1
-        st.caption(f"Equivalência: **{taxa_aa * 100:.2f}% a.a.** — recalcule após configurar.")
+        caixa_minimo = numero_brl(
+            "Caixa mínimo a manter (R$) — 0 = sem reserva",
+            value=float(fin.caixa_minimo),
+            key="fin_caixa_minimo",
+            min_value=0.0,
+            help=(
+                "Ex.: 500.000 → o sistema sempre mantém R$ 500k disponível. "
+                "Saques cobrem quedas abaixo desse valor; amortizações só ocorrem quando o "
+                "caixa supera esse valor. "
+                "Recomendado para projetos com muitas despesas imprevistas ou cronograma apertado."
+            ),
+        )
+
+        if caixa_minimo > 0:
+            st.info(
+                f"📌 Com caixa mínimo de **{formatar_brl(caixa_minimo)}**, o sistema vai sacar "
+                "mais da linha de crédito (para cobrir o buffer) e amortizar mais devagar "
+                "(preservando a reserva). Isso aumenta o custo do financiamento, mas reduz o "
+                "risco operacional do projeto."
+            )
+        else:
+            st.caption("✓ Sem reserva — o sistema amortiza todo saldo excedente e só saca quando o caixa for negativo.")
 
     # Auto-save
-    _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof)
+    _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo)
 
     # Navegacao
     btn_proximo_modulo("Reajustes")

@@ -34,8 +34,206 @@ from ..tabela_mensal import atalhos_por_intervalos
 
 
 CHAVE_FLUXOS = "aba2_lista_fluxos"
-CHAVE_CURVA_MENSAL = "aba2_curva_mensal"    # dict {mes: (pct, fluxo_nome)}
-CHAVE_CURVA_SNAPSHOT = "aba2_curva_snapshot"  # A10: snapshot do ultimo estado salvo
+CHAVE_CURVA_MENSAL = "aba2_curva_mensal"        # dict {mes: (pct, fluxo_nome)}
+CHAVE_CURVA_SNAPSHOT = "aba2_curva_snapshot"    # A10: snapshot do ultimo estado salvo
+CHAVE_FATORES_PRECO = "aba2_fatores_preco"      # dict {mes: fator_preco} — preco progressivo
+CHAVE_CENARIO_PENDENTE = "_aba2_cenario_venda_pendente"
+
+
+# =====================================================================
+# CENARIOS PRE-CONFIGURADOS DE VELOCIDADE DE VENDAS
+# =====================================================================
+
+_CENARIOS_VENDA = [
+    {
+        "nome": "🚀 Esgotamento no lançamento — Otimista",
+        "descricao": (
+            "40% vendidos nos 3 primeiros meses (lançamento impactante), 40% ao longo "
+            "do 1º ano e 20% restantes até o fim das obras. Estoque zerado antes da entrega."
+        ),
+        "fases": [
+            ("Lançamento (3 meses)",      "L",    "L+2",  40.0),
+            ("1º ano pós-lançamento",     "L+3",  "L+11", 40.0),
+            ("Até fim das obras",         "L+12", "T",    20.0),
+        ],
+    },
+    {
+        "nome": "📈 Mercado aquecido — Sem estoque pós-obra",
+        "descricao": (
+            "Lançamento sólido (25% nos 2 primeiros meses) e ritmo sustentado durante "
+            "toda a obra (75%). Vendas e entrega ocorrem juntas."
+        ),
+        "fases": [
+            ("Lançamento (2 meses)",      "L",   "L+1", 25.0),
+            ("Durante obras",             "L+2", "T",   75.0),
+        ],
+    },
+    {
+        "nome": "📊 Padrão de mercado — 15% de estoque pós-obra",
+        "descricao": (
+            "Lançamento dentro do esperado (20%), vendas constantes durante obras (65%) "
+            "e 15% de estoque residual vendido nos 6 meses após a entrega."
+        ),
+        "fases": [
+            ("Lançamento (3 meses)",      "L",   "L+2", 20.0),
+            ("Durante obras",             "L+3", "T",   65.0),
+            ("Pós-obra (6 meses)",        "T+1", "T+6", 15.0),
+        ],
+    },
+    {
+        "nome": "🏗 Conservador — 30% de estoque pós-obra",
+        "descricao": (
+            "Lançamento moderado (15%), ritmo médio durante obras (55%) e 30% do "
+            "estoque vendido ao longo do ano seguinte à entrega."
+        ),
+        "fases": [
+            ("Lançamento (3 meses)",      "L",   "L+2",  15.0),
+            ("Durante obras",             "L+3", "T",    55.0),
+            ("Pós-obra (12 meses)",       "T+1", "T+12", 30.0),
+        ],
+    },
+    {
+        "nome": "📉 Estoque prolongado — Obra + 18 meses",
+        "descricao": (
+            "Ritmo lento de vendas: 10% no lançamento, 40% durante obras e 50% do "
+            "estoque distribuído ao longo dos 18 meses após a entrega. Avalie o financiamento."
+        ),
+        "fases": [
+            ("Lançamento (2 meses)",      "L",   "L+1",  10.0),
+            ("Durante obras",             "L+2", "T",    40.0),
+            ("Pós-obra (18 meses)",       "T+1", "T+18", 50.0),
+        ],
+    },
+    {
+        "nome": "💥 Lançamento impactante + desaceleração",
+        "descricao": (
+            "Grande evento de lançamento: 50% vendidos nos primeiros 4 meses, "
+            "desaceleração gradual durante obras (40%) e 10% de residual pós-entrega."
+        ),
+        "fases": [
+            ("Evento de lançamento (4 meses)", "L",   "L+3", 50.0),
+            ("Durante obras",                  "L+4", "T",   40.0),
+            ("Pós-obra (6 meses)",             "T+1", "T+6", 10.0),
+        ],
+    },
+]
+
+
+def _resolver_mes_venda(expr: str, L: int, T: int) -> int:
+    """Resolve 'L+3', 'T', 'T+6', etc. para mes absoluto."""
+    expr = expr.strip()
+    if expr.startswith("L"):
+        return max(0, L + (int(expr[1:]) if len(expr) > 1 else 0))
+    if expr.startswith("T"):
+        return max(0, T + (int(expr[1:]) if len(expr) > 1 else 0))
+    return max(0, int(expr))
+
+
+def _gerar_curva_cenario(
+    fases: list[tuple[str, str, str, float]],
+    L: int,
+    T: int,
+    horizonte: int,
+    fluxo_nome: str,
+) -> dict[int, tuple[float, str]]:
+    """Distribui percentuais linearmente em cada fase, sem sobreposicao."""
+    resultado: dict[int, tuple[float, str]] = {}
+    ultimo_fim = -1
+    for (_label, ini_expr, fim_expr, pct_total) in fases:
+        ini = max(ultimo_fim + 1, _resolver_mes_venda(ini_expr, L, T))
+        fim = min(horizonte - 1, max(ini, _resolver_mes_venda(fim_expr, L, T)))
+        if pct_total <= 0 or ini > fim:
+            continue
+        n = fim - ini + 1
+        vals = [round(pct_total / n, 2)] * n
+        residuo = round(pct_total - sum(vals), 2)
+        vals[-1] = round(vals[-1] + residuo, 2)
+        for i, v in enumerate(vals):
+            if v > 0:
+                resultado[ini + i] = (v, fluxo_nome)
+        ultimo_fim = fim
+    return resultado
+
+
+def _renderizar_cenarios_venda(
+    curva_estado: dict[int, tuple[float, str]],
+    marcos: dict[int, str],
+    nomes_fluxos: list[str],
+    horizonte: int,
+) -> None:
+    """Expander com cenarios pre-configurados. Armazena resultado em session_state."""
+    L = next((k for k, v in marcos.items() if "Lanc" in v), None)
+    T = next(
+        (k for k, v in marcos.items() if ("Fim" in v or "fim" in v) and "Obra" in v),
+        None,
+    )
+    if L is None:
+        L = 0
+    if T is None:
+        T = max(1, horizonte // 2)
+
+    fluxo_padrao = nomes_fluxos[0] if nomes_fluxos else ""
+
+    with st.expander("📋 Cenários de velocidade de vendas", expanded=not bool(curva_estado)):
+        st.caption(
+            "Selecione um cenário como ponto de partida. "
+            "Valores são distribuídos linearmente em cada fase — ajuste na tabela mensal abaixo."
+        )
+
+        nomes = [c["nome"] for c in _CENARIOS_VENDA]
+        sel_idx = st.selectbox(
+            "Cenário",
+            options=list(range(len(nomes))),
+            format_func=lambda i: nomes[i],
+            key="aba2_cenario_venda_sel",
+            label_visibility="collapsed",
+        )
+        cen = _CENARIOS_VENDA[sel_idx]
+        st.caption(cen["descricao"])
+
+        if len(nomes_fluxos) > 1:
+            fluxo_sel = st.selectbox(
+                "Fluxo de recebíveis",
+                options=nomes_fluxos,
+                index=0,
+                key="aba2_cenario_fluxo_sel",
+                help="Fluxo aplicado a todos os meses do cenário. Ajuste por mês na tabela.",
+            )
+        else:
+            fluxo_sel = fluxo_padrao
+
+        # Preview das fases com barra proporcional
+        ref_total = max(1, T + 12 - L)
+        cols_hdr = st.columns([3, 1, 4])
+        cols_hdr[0].markdown("**Fase**")
+        cols_hdr[1].markdown("**%**")
+        cols_hdr[2].markdown(f"**Período  (Lanç=M{L} | Fim obras=M{T})**")
+
+        for (_label, ini_expr, fim_expr, pct) in cen["fases"]:
+            ini = max(0, _resolver_mes_venda(ini_expr, L, T))
+            fim = min(horizonte - 1, max(ini, _resolver_mes_venda(fim_expr, L, T)))
+            cols = st.columns([3, 1, 4])
+            cols[0].caption(_label)
+            cols[1].caption(f"{pct:.0f}%")
+            offset = max(0, int((ini - L) / ref_total * 28))
+            width  = max(1, int((fim - ini + 1) / ref_total * 28))
+            barra  = " " * offset + "█" * width
+            cols[2].caption(f"`{barra}` M{ini}–M{fim}")
+
+        st.caption(
+            "⚠️ O cenário distribui os percentuais linearmente. "
+            "Ajuste mês a mês na tabela conforme sua expectativa de mercado."
+        )
+
+        if st.button(
+            "▶ Aplicar cenário",
+            key="btn_aplicar_cenario_venda",
+            type="primary",
+        ):
+            nova = _gerar_curva_cenario(
+                cen["fases"], L, T, horizonte, fluxo_sel or fluxo_padrao
+            )
+            st.session_state[CHAVE_CENARIO_PENDENTE] = nova
 
 
 def _carregar_fluxos_do_projeto() -> list[dict]:
@@ -75,6 +273,27 @@ def _carregar_curva_mensal_do_projeto() -> dict[int, tuple[float, str]]:
     return out
 
 
+def _carregar_fatores_do_projeto() -> dict[int, float]:
+    """Carrega o fator_preco por mes a partir das faixas do projeto."""
+    projeto = get_projeto()
+    fatores: dict[int, float] = {}
+    for faixa in projeto.receitas.curva_vendas:
+        if abs(faixa.fator_preco - 1.0) < 0.0001:
+            continue
+        for i in range(faixa.mes_fim - faixa.mes_inicio + 1):
+            fatores[faixa.mes_inicio + i] = faixa.fator_preco
+    return fatores
+
+
+def _tem_fatores_progressivos() -> bool:
+    """Retorna True se o projeto ja tem algum fator de preco nao unitario."""
+    try:
+        projeto = get_projeto()
+        return any(abs(f.fator_preco - 1.0) > 0.001 for f in projeto.receitas.curva_vendas)
+    except Exception:
+        return False
+
+
 def _garantir_estado() -> None:
     if CHAVE_FLUXOS not in st.session_state:
         st.session_state[CHAVE_FLUXOS] = _carregar_fluxos_do_projeto()
@@ -82,6 +301,8 @@ def _garantir_estado() -> None:
         loaded = _carregar_curva_mensal_do_projeto()
         st.session_state[CHAVE_CURVA_MENSAL] = loaded
         st.session_state[CHAVE_CURVA_SNAPSHOT] = dict(loaded)  # A10
+    if CHAVE_FATORES_PRECO not in st.session_state:
+        st.session_state[CHAVE_FATORES_PRECO] = _carregar_fatores_do_projeto()
 
 
 def _fluxos_mudaram(fluxos_estado: list[dict], receitas) -> bool:
@@ -111,6 +332,7 @@ def _executar_save_aba2(
     mes_termino_obras: int,
     projeto,
     receitas,
+    fatores_estado: dict[int, float] | None = None,
 ) -> None:
     """Salva fluxos + curva de vendas no projeto."""
     try:
@@ -149,15 +371,18 @@ def _executar_save_aba2(
             except Exception:
                 continue
 
+        _fatores = fatores_estado or {}
         curva_obj = []
         for mes in sorted(curva_estado.keys()):
             pct, fluxo_n = curva_estado[mes]
             if pct > 0:
+                fator = max(0.01, float(_fatores.get(mes, 1.0) or 1.0))
                 try:
                     curva_obj.append(FaixaCurvaVendas(
                         mes_inicio=mes, mes_fim=mes,
                         percentual_estoque=pct,
                         fluxo_recebiveis=fluxo_n,
+                        fator_preco=fator,
                     ))
                 except Exception:
                     continue
@@ -239,6 +464,7 @@ def renderizar() -> None:
                 st.rerun()
 
         indices_remover_fluxo = []
+        indices_duplicar_fluxo = []
         for idx, fluxo in enumerate(fluxos_estado):
             soma = (
                 float(fluxo.get("percentual_sinal", 0) or 0)
@@ -250,13 +476,18 @@ def renderizar() -> None:
             titulo = f"{status} **{fluxo.get('nome', f'Fluxo {idx+1}')}** (soma: {soma:.2f}%)"
 
             with st.expander(titulo, expanded=False, key=f"exp_fluxo_{idx}"):
-                col_n, col_x = st.columns([4, 1])
+                col_n, col_dup, col_x = st.columns([4, 1, 1])
                 with col_n:
                     fluxo["nome"] = st.text_input(
                         "Nome do fluxo",
                         value=fluxo.get("nome", f"Fluxo {idx+1}"),
                         key=f"fluxo_{idx}_nome",
                     )
+                with col_dup:
+                    st.markdown("&nbsp;")
+                    if st.button("📋", key=f"fluxo_{idx}_duplicar",
+                                 use_container_width=True, help="Duplicar este fluxo — cria uma cópia com todos os percentuais e juros"):
+                        indices_duplicar_fluxo.append(idx)
                 with col_x:
                     st.markdown("&nbsp;")
                     if st.button("🗑️", key=f"fluxo_{idx}_remover",
@@ -378,6 +609,13 @@ def renderizar() -> None:
                     unsafe_allow_html=True,
                 )
 
+        if indices_duplicar_fluxo:
+            for idx in sorted(indices_duplicar_fluxo, reverse=True):
+                fonte = fluxos_estado[idx]
+                copia = {**fonte, "nome": f"{fonte.get('nome', f'Fluxo {idx+1}')} (copia)"}
+                fluxos_estado.insert(idx + 1, copia)
+            st.rerun()
+
         if indices_remover_fluxo:
             for idx in sorted(indices_remover_fluxo, reverse=True):
                 fluxos_estado.pop(idx)
@@ -402,8 +640,20 @@ def renderizar() -> None:
 
         curva_estado = st.session_state[CHAVE_CURVA_MENSAL]
 
+        # Cenarios pre-configurados
+        aplicar_cenario_venda = False
+        if CHAVE_CENARIO_PENDENTE in st.session_state:
+            nova_curva = st.session_state.pop(CHAVE_CENARIO_PENDENTE)
+            curva_estado.clear()
+            curva_estado.update(nova_curva)
+            aplicar_cenario_venda = True
+
+        _renderizar_cenarios_venda(curva_estado, marcos, nomes_fluxos, horizonte)
+
+        st.markdown("---")
+
         # Atalhos por intervalos para a curva de vendas
-        st.markdown("**Atalhos para preencher:**")
+        st.markdown("**Atalhos por faixa:**")
         st.caption("Defina faixas com % de estoque e fluxo, clique Aplicar.")
         chave_atl_curva = "_ativ_result_curva_vendas"
         aplicar_atalho_curva = False
@@ -463,6 +713,11 @@ def renderizar() -> None:
                 except Exception:
                     pass
 
+        # Preco progressivo por fase
+        st.markdown("---")
+        aplicar_fatores = _renderizar_preco_progressivo(curva_estado, horizonte)
+        st.markdown("---")
+
         # Tabela mensal customizada
         st.markdown("**Tabela mensal de vendas:**")
         _renderizar_tabela_curva_vendas(curva_estado, horizonte, marcos, nomes_fluxos)
@@ -504,10 +759,137 @@ def renderizar() -> None:
     _mes_to = _me(projeto.terreno.datas.inicio_projeto, projeto.terreno.datas.termino_obras)
     st.session_state["_aba2_mes_termino_obras"] = _mes_to
 
-    if not (salvar_curva or fluxo_mudou or aplicar_atalho_curva):
+    if not (salvar_curva or fluxo_mudou or aplicar_atalho_curva or aplicar_fatores or aplicar_cenario_venda):
         return
 
-    _executar_save_aba2(fluxos_estado, curva_estado, _mes_to, projeto, receitas)
+    _executar_save_aba2(
+        fluxos_estado, curva_estado, _mes_to, projeto, receitas,
+        fatores_estado=st.session_state.get(CHAVE_FATORES_PRECO),
+    )
+
+
+def _renderizar_preco_progressivo(curva_estado: dict, horizonte: int) -> bool:
+    """
+    Secao de preco progressivo por fase.
+
+    Permite ao usuario definir bandas de tempo com multiplicadores de preco.
+    Retorna True quando o usuario clicar em Aplicar (para triggerar o save).
+    """
+    import pandas as pd
+    from ..helpers import formatar_num as _fn
+
+    ativo = st.toggle(
+        "🔀 Preco progressivo por fase",
+        value=st.session_state.get("aba2_preco_progressivo_ativo", _tem_fatores_progressivos()),
+        key="aba2_preco_progressivo_ativo",
+        help=(
+            "Aplica um multiplicador de preco diferente em cada fase de vendas. "
+            "Ex.: 0,95x no lancamento (-5%) e 1,10x no estoque (+10%). "
+            "Impacta diretamente a receita e a margem do empreendimento."
+        ),
+    )
+
+    if not ativo:
+        if st.session_state.get(CHAVE_FATORES_PRECO):
+            st.session_state[CHAVE_FATORES_PRECO] = {}
+            return True
+        return False
+
+    # Bandas: [Fase, Inicio, Fim, Fator]
+    CHAVE_BANDAS = "aba2_preco_bandas"
+    if CHAVE_BANDAS not in st.session_state:
+        fatores = st.session_state.get(CHAVE_FATORES_PRECO, {})
+        if fatores:
+            # Reconstruir bandas a partir dos fatores existentes
+            meses_ord = sorted(fatores.keys())
+            bandas: list[dict] = []
+            ini = meses_ord[0]
+            fator_ant = fatores[ini]
+            for m in meses_ord[1:]:
+                if abs(fatores[m] - fator_ant) > 0.001:
+                    bandas.append({"Fase": f"Fase {len(bandas)+1}", "Inicio (M)": ini, "Fim (M)": m - 1, "Fator": fator_ant})
+                    ini = m
+                    fator_ant = fatores[m]
+            bandas.append({"Fase": f"Fase {len(bandas)+1}", "Inicio (M)": ini, "Fim (M)": meses_ord[-1], "Fator": fator_ant})
+        else:
+            meses_com_venda = sorted(m for m, (p, _) in curva_estado.items() if p > 0)
+            ini_v = meses_com_venda[0] if meses_com_venda else 0
+            fim_v = meses_com_venda[-1] if meses_com_venda else horizonte
+            dur = max(1, fim_v - ini_v)
+            terco = dur // 3
+            bandas = [
+                {"Fase": "Lancamento", "Inicio (M)": ini_v, "Fim (M)": ini_v + terco, "Fator": 0.95},
+                {"Fase": "Maturacao", "Inicio (M)": ini_v + terco + 1, "Fim (M)": ini_v + 2 * terco, "Fator": 1.00},
+                {"Fase": "Estoque", "Inicio (M)": ini_v + 2 * terco + 1, "Fim (M)": fim_v, "Fator": 1.10},
+            ]
+        st.session_state[CHAVE_BANDAS] = bandas
+
+    df_bandas = pd.DataFrame(st.session_state[CHAVE_BANDAS])
+
+    st.caption(
+        "Defina faixas de tempo com multiplicadores de preco. "
+        "Fator 1,00 = preco padrao | 0,95 = -5% | 1,10 = +10%. "
+        "Meses fora das faixas usam fator 1,00 (preco padrao)."
+    )
+
+    df_edit = st.data_editor(
+        df_bandas,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "Fase": st.column_config.TextColumn(
+                "Fase",
+                help="Nome da fase de vendas",
+            ),
+            "Inicio (M)": st.column_config.NumberColumn(
+                "Inicio (M)", min_value=0, max_value=horizonte, step=1, format="%d",
+            ),
+            "Fim (M)": st.column_config.NumberColumn(
+                "Fim (M)", min_value=0, max_value=horizonte, step=1, format="%d",
+            ),
+            "Fator": st.column_config.NumberColumn(
+                "Fator (× preco base)", min_value=0.1, max_value=5.0, step=0.01, format="%.2f",
+                help="1,00 = preco padrao | 0,95 = 5% desconto | 1,10 = 10% agio",
+            ),
+        },
+        key="aba2_bandas_editor",
+    )
+
+    col_btn, col_info = st.columns([1, 3])
+    with col_btn:
+        aplicar = st.button("▶ Aplicar fatores", key="btn_aplicar_fatores_preco",
+                            use_container_width=True, type="primary")
+    with col_info:
+        fatores_atuais = st.session_state.get(CHAVE_FATORES_PRECO, {})
+        if fatores_atuais and curva_estado:
+            soma_pct = sum(p for p, _ in curva_estado.values())
+            if soma_pct > 0:
+                fator_medio = sum(
+                    p * fatores_atuais.get(m, 1.0)
+                    for m, (p, _) in curva_estado.items()
+                ) / soma_pct
+                delta_pct = (fator_medio - 1.0) * 100
+                projeto = get_projeto()
+                vgv_base = projeto.terreno.vgv_bruto
+                st.caption(
+                    f"Fator medio ponderado: **{fator_medio:.3f}×** "
+                    f"→ Δ VGV ≈ **{delta_pct:+.1f}%** "
+                    f"({_fn(vgv_base * fator_medio, 0)} vs base {_fn(vgv_base, 0)})"
+                )
+
+    if aplicar:
+        novos_fatores: dict[int, float] = {}
+        for _, row in df_edit.iterrows():
+            ini = int(row.get("Inicio (M)", 0) or 0)
+            fim = int(row.get("Fim (M)", 0) or 0)
+            fator = float(row.get("Fator", 1.0) or 1.0)
+            for m in range(ini, fim + 1):
+                novos_fatores[m] = max(0.01, fator)
+        st.session_state[CHAVE_FATORES_PRECO] = novos_fatores
+        st.session_state[CHAVE_BANDAS] = df_edit.to_dict(orient="records")
+        return True
+
+    return False
 
 
 def _renderizar_tabela_curva_vendas(

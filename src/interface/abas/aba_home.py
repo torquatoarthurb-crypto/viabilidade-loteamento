@@ -63,8 +63,49 @@ section[data-testid="stSidebar"] { display: none !important; }
 .proj-nome   { font-size: 15px; font-weight: 700; color: #F5F3EE; margin-bottom: 2px; }
 .proj-local  { font-size: 12px; color: #8A8880; margin-bottom: 12px; }
 .proj-vgv    { font-size: 13px; color: #60A5FA; font-weight: 600; }
-.proj-lotes  { font-size: 12px; color: #8A8880; margin-bottom: 8px; }
+.proj-lotes  { font-size: 12px; color: #8A8880; margin-bottom: 10px; }
 .proj-data   { font-size: 11px; color: #4A4845; margin-top: 10px; }
+
+/* Grade de KPIs — 3 colunas */
+.proj-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin: 10px 0 8px;
+}
+.proj-cell {
+    background: rgba(255,255,255,0.05);
+    border-radius: 7px;
+    padding: 8px 10px;
+}
+.proj-cell-wide {
+    grid-column: span 2;
+}
+.proj-cell-label {
+    font-size: 10px;
+    color: #6B7280;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: 3px;
+    white-space: nowrap;
+}
+.proj-cell-val {
+    font-size: 14px;
+    font-weight: 700;
+    color: #E8EAED;
+}
+.proj-cell-val.neg { color: #F87171; }
+.proj-cell-val.pos { color: #34D399; }
+.tma-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #60A5FA;
+    background: rgba(96,165,250,0.12);
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-left: 4px;
+    vertical-align: middle;
+}
 
 /* Badge TIR */
 .badge-tir {
@@ -199,6 +240,65 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
         badge = '<span class="badge-sem">Não calculado</span>'
         calc_info = ""
 
+    # KPIs extras (somente quando calculado)
+    kpis_html = ""
+    if meta:
+        def _fmt_pct(v) -> str:
+            return f"{v * 100:.1f}%" if v is not None else "—"
+
+        def _fmt_val(v) -> str:
+            if v is None:
+                return "—"
+            av = abs(v)
+            sinal = "-" if v < 0 else ""
+            if av >= 1_000_000:
+                return f"{sinal}R$ {av / 1_000_000:.1f}M"
+            return f"{sinal}R$ {av / 1_000:.0f}k"
+
+        def _cls(v) -> str:
+            if v is None:
+                return ""
+            return " neg" if v < 0 else " pos"
+
+        mb_v  = meta.get("margem_bruta")
+        ml_v  = meta.get("margem")
+        exp_v = meta.get("exposicao_maxima")
+        res_v = meta.get("lucro_liquido")
+        vpl_v = meta.get("vpl")
+        tma   = meta.get("tma")
+
+        tma_tag = (
+            f'<span class="tma-tag">TMA {tma:.0f}% a.a.</span>'
+            if tma is not None else ""
+        )
+
+        kpis_html = (
+            f'<div class="proj-grid">'
+            # Row 1
+            f'<div class="proj-cell">'
+            f'<div class="proj-cell-label">Marg. Bruta</div>'
+            f'<div class="proj-cell-val{_cls(mb_v)}">{_fmt_pct(mb_v)}</div>'
+            f'</div>'
+            f'<div class="proj-cell">'
+            f'<div class="proj-cell-label">Marg. Líquida</div>'
+            f'<div class="proj-cell-val{_cls(ml_v)}">{_fmt_pct(ml_v)}</div>'
+            f'</div>'
+            f'<div class="proj-cell">'
+            f'<div class="proj-cell-label">Resultado Nominal</div>'
+            f'<div class="proj-cell-val{_cls(res_v)}">{_fmt_val(res_v)}</div>'
+            f'</div>'
+            # Row 2
+            f'<div class="proj-cell">'
+            f'<div class="proj-cell-label">Exposição Máx.</div>'
+            f'<div class="proj-cell-val neg">{_fmt_val(exp_v)}</div>'
+            f'</div>'
+            f'<div class="proj-cell proj-cell-wide">'
+            f'<div class="proj-cell-label">VPL {tma_tag}</div>'
+            f'<div class="proj-cell-val{_cls(vpl_v)}">{_fmt_val(vpl_v)}</div>'
+            f'</div>'
+            f'</div>'
+        )
+
     st.markdown(
         f'<div class="proj-card">'
         f'<div class="proj-nome">{nome}</div>'
@@ -206,6 +306,7 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
         f'{badge}'
         f'<div class="proj-vgv">{vgv_str}</div>'
         f'<div class="proj-lotes">{lotes_str}</div>'
+        f'{kpis_html}'
         f'<div class="proj-data">💾 Salvo: {proj["ultima_modificacao"]}</div>'
         f'{f"<div class=\'proj-data\'>{calc_info}</div>" if calc_info else ""}'
         f'</div>',

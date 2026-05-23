@@ -27,6 +27,11 @@ class Tipologia(BaseModel):
     valor_unitario: float = Field(
         ..., gt=0, description="R$/m2 (se modo_preco=por_m2) ou R$/lote (se por_lote)"
     )
+    gio_percentual: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Gio sobre o preco padrao para lotes especiais (%). 0 = sem agio.",
+    )
 
     @property
     def area_total_m2(self) -> float:
@@ -35,10 +40,9 @@ class Tipologia(BaseModel):
 
     @property
     def vgv_lote(self) -> float:
-        """VGV de um unico lote desta tipologia."""
-        if self.modo_preco == "por_m2":
-            return self.area_lote_m2 * self.valor_unitario
-        return self.valor_unitario
+        """VGV de um unico lote desta tipologia, ja com o agio aplicado."""
+        preco_base = self.area_lote_m2 * self.valor_unitario if self.modo_preco == "por_m2" else self.valor_unitario
+        return preco_base * (1 + self.gio_percentual / 100)
 
     @property
     def vgv_total(self) -> float:

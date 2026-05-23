@@ -34,7 +34,27 @@ from ..tema_componentes import (
 )
 from ..validacoes import validar_projeto_completo
 from ...engine.utilidades import meses_entre
+from ...engine.financiamento_engine import simular_financiamento
 from ...io_projeto.exportar_html import gerar_relatorio_html
+
+
+# =====================================================================
+# CONFIG DE EXPORT PNG (barra de ferramenta discreta com icone de camera)
+# =====================================================================
+
+_PLOTLY_CONFIG = {
+    "displayModeBar": "hover",
+    "modeBarButtonsToRemove": [
+        "zoom2d", "pan2d", "select2d", "lasso2d",
+        "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d",
+        "hoverClosestCartesian", "hoverCompareCartesian", "toggleSpikelines",
+    ],
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "viabilidade",
+        "scale": 2,
+    },
+}
 
 
 # =====================================================================
@@ -168,7 +188,9 @@ def _renderizar_saude(projeto) -> None:
 
     checks.append((True, "Data de repasse >= termino de obras"))
 
-    renderizar_saude_modelo(checks)
+    # Só exibe quando há pelo menos um problema — serve como sinal de atenção
+    if not all(ok for ok, _ in checks):
+        renderizar_saude_modelo(checks)
 
 
 # =====================================================================
@@ -463,7 +485,7 @@ def _renderizar_composicao_saidas(r: dict) -> None:
             hoverlabel=dict(bgcolor="#ECEAE4", font_size=12, font_color="#1A1916"),
             height=320,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
 
     with col_tabela:
         linhas: list[str] = []
@@ -534,22 +556,22 @@ def _adicionar_fases(fig: go.Figure, mes_inicio_obras: int, mes_termino: int) ->
         fig.add_vrect(
             x0=0, x1=mes_inicio_obras,
             fillcolor="rgba(74,127,165,0.06)", line_width=0,
-            annotation_text="Pre-obra", annotation_position="top left",
-            annotation_font=dict(size=9, color="#4A7FA5"),
+            annotation_text="Pre-obra", annotation_position="inside top left",
+            annotation_font=dict(size=8, color="#4A7FA5"),
         )
     if mes_termino > mes_inicio_obras:
         fig.add_vrect(
             x0=mes_inicio_obras, x1=mes_termino,
             fillcolor="rgba(43,80,168,0.07)", line_width=0,
-            annotation_text="Obras", annotation_position="top left",
-            annotation_font=dict(size=9, color="#2B50A8"),
+            annotation_text="Obras", annotation_position="inside top left",
+            annotation_font=dict(size=8, color="#2B50A8"),
         )
     if mes_termino > 0:
         fig.add_vline(
             x=mes_termino, line_dash="dash",
             line_color="rgba(43,80,168,0.50)", line_width=1,
-            annotation_text=f"Fim obras M{mes_termino}", annotation_position="top right",
-            annotation_font=dict(size=9, color="#2B50A8"),
+            annotation_text=f"M{mes_termino}", annotation_position="top left",
+            annotation_font=dict(size=8, color="#2B50A8"),
         )
 
 
@@ -592,18 +614,16 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
         hovertemplate="M%{x}<br>Saldo Acumulado: R$ %{y:,.0f}<extra></extra>",
     ))
     fig.add_trace(go.Scatter(
-        x=[mes_exp], y=[exp_val], mode="markers+text",
+        x=[mes_exp], y=[exp_val], mode="markers",
         marker=dict(color="#C05454", size=11, symbol="circle", line=dict(color="#F5F3EE", width=1)),
-        text=[f"  Pico: {_fmt_m(exp_val)}"], textposition="middle right",
-        textfont=dict(color="#C05454", size=10), showlegend=False,
+        name=f"Exposicao maxima ({_fmt_m(exp_val)})",
         hovertemplate=f"Pico de exposicao: R$ {exp_val:,.0f}<extra></extra>",
     ))
     if pb:
         fig.add_trace(go.Scatter(
-            x=[pb], y=[0], mode="markers+text",
+            x=[pb], y=[0], mode="markers",
             marker=dict(color="#3D8B5E", size=11, symbol="diamond", line=dict(color="#F5F3EE", width=1)),
-            text=[f"  Payback M{pb}"], textposition="top right",
-            textfont=dict(color="#3D8B5E", size=10), showlegend=False,
+            name=f"Payback M{pb}",
             hovertemplate=f"Payback no mes {pb}<extra></extra>",
         ))
     fig.add_hline(y=0, line_color="rgba(0,0,0,0.15)", line_width=1)
@@ -613,9 +633,10 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
         partes.append(f"TIR: {formatar_pct(tir)} a.a.")
     fig.add_annotation(
         x=0.99, y=0.04, xref="paper", yref="paper",
-        text="   ".join(partes), showarrow=False,
+        text="  |  ".join(partes), showarrow=False,
         font=dict(size=11, color="#1A1916"),
-        bgcolor="#ECEAE4", bordercolor="#C4C1B8", borderwidth=1, align="right",
+        bgcolor="#ECEAE4", bordercolor="#C4C1B8", borderwidth=1,
+        xanchor="right", yanchor="bottom",
     )
     fig.update_layout(**_layout(
         title="Curva de Caixa — Saldo Acumulado",
@@ -623,7 +644,7 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
         yaxis=dict(title="R$", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
         height=430,
     ))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
         "🔴 Area vermelha: capital em exposicao. "
         "🟢 Area verde: zona de retorno. "
@@ -669,15 +690,28 @@ def _grafico_composicao_mensal(df, mes_inicio_obras: int, mes_termino: int) -> N
 
     fig.add_hline(y=0, line_color="rgba(0,0,0,0.15)", line_width=1, secondary_y=False)
     _adicionar_fases(fig, mes_inicio_obras, mes_termino)
-    fig.update_layout(**_layout(
+    layout = _layout(
         title="Composicao Mensal — Entradas e Saidas por Categoria",
         barmode="relative",
         xaxis=dict(title="Mes", gridcolor="#D8D4C8"),
-        height=500,
-    ))
+        height=520,
+        margin=dict(l=60, r=170, t=50, b=50),
+        legend=dict(
+            bgcolor="#F5F3EE",
+            bordercolor="#D8D4C8",
+            borderwidth=1,
+            font=dict(size=10),
+            orientation="v",
+            xanchor="left",
+            x=1.02,
+            y=1,
+            yanchor="top",
+        ),
+    )
+    fig.update_layout(**layout)
     fig.update_yaxes(title_text="R$ (Entradas / Saidas)", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
     fig.update_yaxes(title_text="Saldo Mensal (R$)", secondary_y=True, showgrid=False, tickfont=dict(color="#5A5650"), title_font=dict(color="#5A5650"))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
         "Barras acima do zero: receitas. Barras abaixo do zero: saidas por categoria. "
         "Linha pontilhada branca: saldo liquido do mes."
@@ -725,7 +759,7 @@ def _grafico_curvas_acumuladas(df, mes_inicio_obras: int, mes_termino: int) -> N
         yaxis=dict(title="R$ Acumulado", gridcolor="#D8D4C8"),
         height=400,
     ))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
         "Linha verde: receitas totais acumuladas. "
         "Linha vermelha: saidas totais acumuladas. "
@@ -783,7 +817,7 @@ def _grafico_obras_vs_comercializacao(df, projeto, horizonte: int, mes_termino: 
         tickformat=".0f", ticksuffix="%", range=[0, 110],
         tickfont=dict(color="#3D8B5E"), title_font=dict(color="#3D8B5E"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
         "Barras (amarelo): desembolso mensal de obras. "
         "Linha (verde): % do empreendimento comercializado acumulado. "
@@ -843,7 +877,24 @@ def _fmt_int_brl(v) -> str:
         return ""
 
 
-def _transpor_df_formatado(df, marcos: dict[int, str] | None = None):
+def _agrupar_marcos_por_periodo(
+    marcos: dict[int, str], n: int, prefix: str, meses: list
+) -> dict[str, str]:
+    """Maps monthly marcos {mes: label} to period labels {period_col: labels}."""
+    result: dict[str, str] = {}
+    i = 0
+    periodo_idx = 1
+    while i < len(meses):
+        chunk = meses[i : i + n]
+        labels = [marcos[m] for m in chunk if m in marcos]
+        if labels:
+            result[f"{prefix}{periodo_idx}"] = " / ".join(labels)
+        i += n
+        periodo_idx += 1
+    return result
+
+
+def _transpor_df_formatado(df, marcos: dict[str, str] | None = None):
     cols_val = [c for c in df.columns if c != "Mes"]
     df_m = df[df[cols_val].abs().sum(axis=1) > 0].copy()
     df_m = df_m.set_index("Mes")
@@ -862,17 +913,12 @@ def _transpor_df_formatado(df, marcos: dict[int, str] | None = None):
         df_fmt[col] = df_fmt[col].map(_fmt_int_brl)
     df_fmt.index.name = "Item"
 
-    # Prepend Marcos row when provided
+    # Prepend Marcos row when provided (keys are column labels)
     if marcos:
-        marcos_row: dict[str, str] = {}
-        for col in df_fmt.columns:
-            try:
-                mes_idx = int(col[1:])  # strip leading "M"
-            except (ValueError, TypeError):
-                mes_idx = -1
-            marcos_row[col] = marcos.get(mes_idx, "")
-        df_marcos = pd.DataFrame([marcos_row], index=pd.Index(["Marcos"], name="Item"))
-        df_fmt = pd.concat([df_marcos, df_fmt])
+        marcos_row = {col: marcos.get(col, "") for col in df_fmt.columns}
+        if any(marcos_row.values()):
+            df_marcos = pd.DataFrame([marcos_row], index=pd.Index(["Marcos"], name="Item"))
+            df_fmt = pd.concat([df_marcos, df_fmt])
 
     return df_fmt
 
@@ -934,8 +980,8 @@ def _estilizar_tabela(df_fmt):
 
 
 @st.dialog("Fluxo de Caixa — Visao Completa", width="large")
-def _dlg_fluxo_tela_cheia(df_agg) -> None:
-    df_t = _transpor_df_formatado(df_agg, marcos=None)
+def _dlg_fluxo_tela_cheia(df_agg, marcos_labels: dict[str, str] | None = None) -> None:
+    df_t = _transpor_df_formatado(df_agg, marcos=marcos_labels)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=700)
     st.caption(f"Valores em R$ mil.   {len(df_t)} linhas · {len(df_t.columns)} periodos com movimentacao.")
 
@@ -956,18 +1002,29 @@ def _tabela_fluxo_mensal(df) -> None:
         )
     with col_b:
         if st.button("⛶ Tela cheia", key="btn_tela_cheia_fluxo", use_container_width=True):
-            _dlg_fluxo_tela_cheia(_agregar_df(df, periodo))
+            _dlg_fluxo_tela_cheia(
+                _agregar_df(df, periodo),
+                st.session_state.get("_fluxo_marcos_labels_cache"),
+            )
 
     df_agg = _agregar_df(df, periodo)
 
-    # Compute marcos only for Mensal view
-    _marcos: dict[int, str] | None = None
-    if periodo == "Mensal":
-        try:
-            projeto = get_projeto()
-            _marcos = marcos_projeto(projeto)
-        except Exception:
-            _marcos = None
+    # Compute marcos for all period views
+    _marcos_labels: dict[str, str] | None = None
+    try:
+        projeto = get_projeto()
+        _marcos_raw = marcos_projeto(projeto)
+        meses_list = [int(m) for m in df["Mes"].tolist()]
+        if periodo == "Mensal":
+            _marcos_labels = {f"M{k}": v for k, v in _marcos_raw.items()}
+        elif periodo == "Trimestral":
+            _marcos_labels = _agrupar_marcos_por_periodo(_marcos_raw, 3, "T", meses_list)
+        else:
+            _marcos_labels = _agrupar_marcos_por_periodo(_marcos_raw, 12, "Ano ", meses_list)
+    except Exception:
+        _marcos_labels = None
+
+    st.session_state["_fluxo_marcos_labels_cache"] = _marcos_labels
 
     if periodo == "Mensal":
         _todos_meses = [int(m) for m in df["Mes"].tolist()]
@@ -988,7 +1045,7 @@ def _tabela_fluxo_mensal(df) -> None:
     else:
         df_vis = df_agg
 
-    df_t = _transpor_df_formatado(df_vis, marcos=_marcos)
+    df_t = _transpor_df_formatado(df_vis, marcos=_marcos_labels)
     altura = min(580, (len(df_t) + 1) * 36 + 38)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=altura)
     legenda_periodo = {"Mensal": "meses", "Trimestral": "trimestres", "Anual": "anos"}[periodo]
@@ -996,6 +1053,64 @@ def _tabela_fluxo_mensal(df) -> None:
         "Valores em **R$ mil**.   "
         f"{len(df_t)} linhas · {len(df_t.columns)} {legenda_periodo} com movimentacao."
     )
+
+
+# =====================================================================
+# PREVIEW DE CUSTO FINANCEIRO (quando financiamento inativo)
+# =====================================================================
+
+def _renderizar_preview_financiamento(df, resultado, projeto) -> None:
+    """Estima o custo financeiro sem alterar o fluxo de caixa calculado."""
+    taxa = projeto.financiamento.taxa_juros_am
+    if taxa <= 0:
+        return
+    try:
+        fluxo_base = df["Saldo do Mes"].to_numpy()
+        sim = simular_financiamento(fluxo_base, projeto.financiamento, resultado.horizonte)
+        custo_proj = float(sim["juros_banco"].sum())
+        pico_saldo = float(sim["saldo_devedor"].max())
+        mes_pico = int(np.argmax(sim["saldo_devedor"]))
+
+        if custo_proj < 1 and pico_saldo < 1:
+            return
+
+        taxa_aa = (1 + taxa / 100) ** 12 - 1
+        st.markdown(
+            f'<div style="background:rgba(43,80,168,0.07);border-left:3px solid #4A7FA5;'
+            f'padding:10px 14px;border-radius:0 6px 6px 0;margin:16px 0 4px 0;">'
+            f'<b>💳 Estimativa de custo financeiro</b> '
+            f'<span style="font-size:12px;color:#6B7280;">— se usar linha de crédito a '
+            f'{taxa:.2f}% a.m. ({taxa_aa * 100:.1f}% a.a.). '
+            f'Fluxo de caixa não é alterado.</span></div>',
+            unsafe_allow_html=True,
+        )
+        kpis_fin = [
+            {
+                "label": "Juros Estimados (CCB/CCE)",
+                "valor": _fmt_m(custo_proj),
+                "sub": "Total do projeto sem limite de crédito",
+                "cor": "vermelho",
+            },
+            {
+                "label": "Pico do Saldo Devedor",
+                "valor": _fmt_m(pico_saldo),
+                "sub": f"No mês M{mes_pico}",
+                "cor": "neutro",
+            },
+            {
+                "label": "Taxa Configurada",
+                "valor": f"{taxa:.2f}% a.m.",
+                "sub": f"{taxa_aa * 100:.1f}% a.a. — ajuste no Módulo 13",
+                "cor": "neutro",
+            },
+        ]
+        renderizar_grade_kpis(kpis_fin)
+        st.caption(
+            "Estimativa informativa gerada com a taxa do Módulo 13 e sem limite de crédito. "
+            "Ative o financiamento no **Módulo 13** para incluir o custo no fluxo real."
+        )
+    except Exception:
+        pass
 
 
 # =====================================================================
@@ -1059,6 +1174,10 @@ def renderizar() -> None:
 
     # KPI grid completo (versao Visao Geral)
     _kpis_topo(r, ind, projeto)
+
+    # Preview de custo financeiro quando financiamento nao esta ativo
+    if not r.get("financiamento_ativo"):
+        _renderizar_preview_financiamento(df, resultado, projeto)
 
     # Aviso de reajustes nao ativados
     try:

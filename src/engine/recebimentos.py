@@ -187,8 +187,8 @@ def calcular_recebimentos(
             raise ValueError(f"Fluxo '{faixa.fluxo_recebiveis}' nao encontrado")
         fluxo = mapa_fluxos[faixa.fluxo_recebiveis]
 
-        # VGV total da faixa
-        vgv_faixa = vgv_vendavel * (faixa.percentual_estoque / 100)
+        # VGV total da faixa — aplica fator de preco progressivo (1.0 = preco base)
+        vgv_faixa = vgv_vendavel * (faixa.percentual_estoque / 100) * faixa.fator_preco
         # Lotes da faixa (proporcional)
         lotes_faixa = total_lotes_vendaveis * (faixa.percentual_estoque / 100)
 
@@ -233,6 +233,7 @@ def calcular_recebimentos(
         "vendas_vgv": vendas_vgv,
         "vendas_qtd_lotes": vendas_qtd,
         "vgv_vendavel": vgv_vendavel,
+        "vgv_efetivo_vendavel": float(vendas_vgv.sum()),
         "vgv_total_recebido": float(recebimentos_total.sum()),
     }
 

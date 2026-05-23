@@ -154,19 +154,27 @@ def salvar_projeto_usuario(email: str, projeto) -> Path:
     return caminho
 
 
-def salvar_meta_projeto(email: str, nome_projeto: str, resultado) -> None:
+def salvar_meta_projeto(email: str, nome_projeto: str, resultado, projeto=None) -> None:
     """Salva um cache leve de indicadores apos o calculo, para exibir na home."""
     ind = resultado.indicadores
     r = resultado.resumo
+    tma = None
+    if projeto is not None:
+        try:
+            tma = projeto.parametros.tma_anual
+        except Exception:
+            pass
     meta = {
         "nome": nome_projeto,
         "calculado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
         "tir_anual": ind.get("tir_anual"),
         "vpl": ind.get("vpl"),
         "margem": r.get("margem_sobre_vgv_vendavel"),
+        "margem_bruta": r.get("margem_sobre_vgv_bruto"),
         "lucro_liquido": r.get("lucro_liquido"),
         "exposicao_maxima": ind.get("exposicao_maxima"),
         "payback_simples_meses": ind.get("payback_simples_meses"),
+        "tma": tma,
     }
     caminho = _caminho_meta(email, nome_projeto)
     with caminho.open("w", encoding="utf-8") as f:

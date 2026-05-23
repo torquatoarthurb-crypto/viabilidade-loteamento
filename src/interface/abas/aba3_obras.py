@@ -36,23 +36,63 @@ from ..tabela_mensal import (
 
 CHAVE_ETAPAS = "aba3_lista_etapas"
 
+# Templates de etapas pre-configurados.
+# Todos os m_ini sao relativos ao inicio das obras (M0 = Ini. Obras).
+# pct = participacao indicativa no custo total (so para orientacao — usuario ajusta os valores).
+_TEMPLATES_OBRA: dict[str, list[dict]] = {
+    "Loteamento 18 meses — Infraestrutura basica": [
+        {"nome": "Servicos Preliminares",      "pct":  3, "m_ini":  0, "dur":  2, "curva": "linear"},
+        {"nome": "Terraplenagem",              "pct": 24, "m_ini":  1, "dur":  5, "curva": "s_curve"},
+        {"nome": "Drenagem Pluvial",           "pct": 17, "m_ini":  3, "dur":  7, "curva": "s_curve"},
+        {"nome": "Redes de Agua",              "pct": 11, "m_ini":  4, "dur":  7, "curva": "s_curve"},
+        {"nome": "Redes de Esgoto",            "pct": 14, "m_ini":  4, "dur":  8, "curva": "s_curve"},
+        {"nome": "Pavimentacao",               "pct": 24, "m_ini":  8, "dur":  8, "curva": "s_curve"},
+        {"nome": "Rede Eletrica e Iluminacao", "pct":  7, "m_ini": 13, "dur":  5, "curva": "linear"},
+    ],
+    "Loteamento 24 meses — Infraestrutura media": [
+        {"nome": "Servicos Preliminares",      "pct":  3, "m_ini":  0, "dur":  2, "curva": "linear"},
+        {"nome": "Terraplenagem",              "pct": 22, "m_ini":  1, "dur":  6, "curva": "s_curve"},
+        {"nome": "Drenagem Pluvial",           "pct": 16, "m_ini":  4, "dur":  9, "curva": "s_curve"},
+        {"nome": "Redes de Agua",              "pct": 11, "m_ini":  5, "dur": 10, "curva": "s_curve"},
+        {"nome": "Redes de Esgoto",            "pct": 13, "m_ini":  5, "dur": 11, "curva": "s_curve"},
+        {"nome": "Pavimentacao",               "pct": 24, "m_ini":  9, "dur": 11, "curva": "s_curve"},
+        {"nome": "Rede Eletrica e Iluminacao", "pct":  8, "m_ini": 16, "dur":  7, "curva": "s_curve"},
+        {"nome": "Paisagismo e Areas Verdes",  "pct":  3, "m_ini": 21, "dur":  3, "curva": "linear"},
+    ],
+    "Loteamento 30 meses — Infraestrutura completa": [
+        {"nome": "Servicos Preliminares",      "pct":  3, "m_ini":  0, "dur":  3, "curva": "linear"},
+        {"nome": "Terraplenagem",              "pct": 22, "m_ini":  1, "dur":  7, "curva": "s_curve"},
+        {"nome": "Drenagem Pluvial",           "pct": 16, "m_ini":  4, "dur": 10, "curva": "s_curve"},
+        {"nome": "Redes de Agua Potavel",      "pct": 10, "m_ini":  5, "dur": 12, "curva": "s_curve"},
+        {"nome": "Redes de Esgoto",            "pct": 13, "m_ini":  6, "dur": 14, "curva": "s_curve"},
+        {"nome": "Pavimentacao",               "pct": 23, "m_ini":  9, "dur": 14, "curva": "s_curve"},
+        {"nome": "Rede Eletrica e Iluminacao", "pct":  9, "m_ini": 18, "dur":  9, "curva": "s_curve"},
+        {"nome": "Paisagismo e Areas Verdes",  "pct":  4, "m_ini": 24, "dur":  5, "curva": "linear"},
+    ],
+}
+
 
 def _gerar_distribuicao_curva_s(mes_inicio: int, qtd_meses: int) -> dict[int, float]:
-    """Gera dict {mes:pct} aproximando uma curva S (logistica)."""
+    """Gera dict {mes:pct} aproximando uma curva S (logistica). Soma exata = 100."""
     import math
     if qtd_meses <= 0:
         return {}
     if qtd_meses == 1:
         return {mes_inicio: 100.0}
 
-    # Usar logistica simetrica
     x_pts = [-3 + (6 * i / qtd_meses) for i in range(qtd_meses + 1)]
     cdf = [1 / (1 + math.exp(-x)) for x in x_pts]
     cdf_norm = [(c - cdf[0]) / (cdf[-1] - cdf[0]) for c in cdf]
     incrementos = [cdf_norm[i+1] - cdf_norm[i] for i in range(qtd_meses)]
     soma = sum(incrementos)
-    incrementos = [i / soma for i in incrementos]
-    return {mes_inicio + i: round(incrementos[i] * 100, 2) for i in range(qtd_meses)}
+    incrementos = [v / soma for v in incrementos]
+    vals = [round(v * 100, 2) for v in incrementos]
+    # Corrige residuo de arredondamento no valor de pico
+    residuo = round(100.0 - sum(vals), 2)
+    if residuo != 0.0:
+        idx_pico = vals.index(max(vals))
+        vals[idx_pico] = round(vals[idx_pico] + residuo, 2)
+    return {mes_inicio + i: vals[i] for i in range(qtd_meses)}
 
 
 def _carregar_etapas_do_projeto() -> list[dict]:
@@ -176,6 +216,64 @@ def renderizar() -> None:
             st.session_state[chave_resumido] = st.session_state.pop(chave_atl_res)
             salvar_fluxo = True
 
+        # ---- Template de curva para o resumido ----
+        with st.expander("📋 Preencher com template de curva"):
+            _tmpl_dur_opcoes = {
+                "18 meses — Curva S (basico)":    18,
+                "24 meses — Curva S (medio)":     24,
+                "30 meses — Curva S (completo)":  30,
+            }
+            _tmpl_res_sel = st.selectbox(
+                "Horizonte da obra",
+                list(_tmpl_dur_opcoes.keys()),
+                key="aba3_tmpl_res_sel",
+                help="Gera uma curva S sobre o período de obras configurado no projeto.",
+            )
+            _dur_res = _tmpl_dur_opcoes[_tmpl_res_sel]
+            _m_ini_res = next(
+                (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
+            )
+            _m_fim_res = _m_ini_res + _dur_res - 1
+
+            # Preview visual da curva S como blocos ASCII
+            import math as _math
+            _n = _dur_res
+            _xs = [-3 + 6 * i / _n for i in range(_n)]
+            _cdf = [1 / (1 + _math.exp(-x)) for x in _xs]
+            _c0, _c1 = _cdf[0], _cdf[-1]
+            _incrementos = [
+                (_cdf[i + 1] - _cdf[i]) / (_c1 - _c0) if i < _n - 1
+                else (_cdf[-1] - _cdf[-2]) / (_c1 - _c0)
+                for i in range(_n)
+            ]
+            _max_inc = max(_incrementos) or 1
+            _barras = "".join(
+                "▁▂▃▄▅▆▇█"[min(7, int(v / _max_inc * 8))]
+                for v in _incrementos
+            )
+            st.caption(
+                f"M{_m_ini_res} → M{_m_fim_res}  |  {_dur_res} meses  |  "
+                f"desembolso mensal: `{_barras}`"
+            )
+            st.caption(
+                "Início lento (mobilização) → aceleração no meio (pico de obras) "
+                "→ desaceleração no fim (acabamentos). "
+                "Ajuste mês a mês na tabela abaixo se necessário."
+            )
+
+            if st.button(
+                "Aplicar curva",
+                key="aba3_tmpl_res_aplicar",
+                type="primary",
+                use_container_width=False,
+                help="Preenche a tabela mensal com a curva S gerada.",
+            ):
+                st.session_state[chave_resumido] = _gerar_distribuicao_curva_s(
+                    _m_ini_res, _dur_res
+                )
+                salvar_fluxo = True
+                st.rerun()
+
         atalhos_por_intervalos("resumido", horizonte, chave_atl_res)
 
         distrib_resumido = tabela_mensal_distribuicao(
@@ -210,6 +308,91 @@ def renderizar() -> None:
         _garantir_estado_etapas()
         etapas_estado = st.session_state[CHAVE_ETAPAS]
 
+        # ---- Templates pre-configurados ----
+        with st.expander("📋 Carregar template de etapas", expanded=not etapas_estado):
+            m_ini_obras = next(
+                (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
+            )
+
+            template_opcoes = list(_TEMPLATES_OBRA.keys())
+            template_sel = st.selectbox(
+                "Selecione um template",
+                template_opcoes,
+                key="aba3_template_sel",
+                help="Templates baseados em cronogramas reais de loteamentos, com etapas sobrepostas.",
+            )
+
+            etapas_tmpl = _TEMPLATES_OBRA[template_sel]
+            m_fim_tmpl = m_ini_obras + max(s["m_ini"] + s["dur"] for s in etapas_tmpl) - 1
+
+            st.caption(
+                f"{len(etapas_tmpl)} etapas  |  "
+                f"M{m_ini_obras} → M{m_fim_tmpl}  |  "
+                f"Duração total: {m_fim_tmpl - m_ini_obras + 1} meses"
+            )
+
+            # Preview das etapas com barra visual de sobreposição
+            cols_hdr = st.columns([3, 1, 4])
+            cols_hdr[0].markdown("**Etapa**")
+            cols_hdr[1].markdown("**~%custo**")
+            cols_hdr[2].markdown("**Período (relativo ao início das obras)**")
+
+            dur_total = max(s["m_ini"] + s["dur"] for s in etapas_tmpl)
+            for s in etapas_tmpl:
+                cols = st.columns([3, 1, 4])
+                m_abs_ini = m_ini_obras + s["m_ini"]
+                m_abs_fim = m_abs_ini + s["dur"] - 1
+                cols[0].caption(s["nome"])
+                cols[1].caption(f"{s['pct']}%")
+                # Barra ASCII proporcional
+                offset = int(s["m_ini"] / dur_total * 24)
+                width  = max(1, int(s["dur"] / dur_total * 24))
+                barra  = " " * offset + "█" * width
+                cols[2].caption(f"`{barra}` M{m_abs_ini}–M{m_abs_fim}")
+
+            st.caption(
+                "⚠️ Os percentuais de custo são indicativos. "
+                "Após aplicar, ajuste os valores (R$) de cada etapa conforme seu orçamento."
+            )
+
+            col_sub, col_add_t, _ = st.columns([1, 1, 2])
+            with col_sub:
+                if st.button(
+                    "Substituir etapas",
+                    key="aba3_tmpl_substituir",
+                    type="primary",
+                    use_container_width=True,
+                    help="Apaga as etapas existentes e carrega o template selecionado.",
+                ):
+                    novas = []
+                    for s in etapas_tmpl:
+                        m_abs = m_ini_obras + s["m_ini"]
+                        dist = (
+                            _gerar_distribuicao_curva_s(m_abs, s["dur"])
+                            if s["curva"] == "s_curve"
+                            else gerar_distribuicao_linear(m_abs, m_abs + s["dur"] - 1)
+                        )
+                        novas.append({"nome": s["nome"], "valor_total": 0.0, "distribuicao": dist})
+                    st.session_state[CHAVE_ETAPAS] = novas
+                    st.rerun()
+            with col_add_t:
+                if st.button(
+                    "Adicionar ao projeto",
+                    key="aba3_tmpl_adicionar",
+                    use_container_width=True,
+                    help="Mantém etapas existentes e acrescenta as do template.",
+                ):
+                    for s in etapas_tmpl:
+                        m_abs = m_ini_obras + s["m_ini"]
+                        dist = (
+                            _gerar_distribuicao_curva_s(m_abs, s["dur"])
+                            if s["curva"] == "s_curve"
+                            else gerar_distribuicao_linear(m_abs, m_abs + s["dur"] - 1)
+                        )
+                        etapas_estado.append({"nome": s["nome"], "valor_total": 0.0, "distribuicao": dist})
+                    st.rerun()
+
+        st.markdown("---")
         col_add, _ = st.columns([1, 3])
         with col_add:
             if st.button("➕ Adicionar etapa", use_container_width=True):

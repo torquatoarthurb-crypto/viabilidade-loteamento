@@ -371,14 +371,34 @@ def renderizar() -> None:
     with st.container(border=True):
         st.markdown("#### 📐 Quadro de Areas")
 
-        col_gleba, col_modo = st.columns([3, 2])
-        with col_gleba:
-            area_gleba = numero_brl(
-                "Area da gleba (m²)",
-                value=float(terreno.areas.area_gleba_m2),
-                key="aba1_area_gleba",
-                min_value=1.0,
+        # U1: seletor de unidade de area (m², ha, alqueire mineiro)
+        _UNIDADES = {"m²": 1.0, "ha": 10_000.0, "alqueire": 48_400.0}
+        _UNIDADE_LABELS = {"m²": "m²", "ha": "hectares (ha)", "alqueire": "alqueires (MG, 48.400 m²)"}
+        _unidade = st.session_state.get("aba1_unidade_area", "m²")
+
+        col_gleba, col_unidade, col_modo = st.columns([2, 1, 2])
+        with col_unidade:
+            _unidade = st.selectbox(
+                "Unidade de área",
+                options=list(_UNIDADES.keys()),
+                index=list(_UNIDADES.keys()).index(_unidade) if _unidade in _UNIDADES else 0,
+                key="aba1_unidade_area",
+                format_func=lambda u: _UNIDADE_LABELS[u],
+                help="Alqueire mineiro = 48.400 m² = 4,84 ha. "
+                     "Alqueire paulista = 24.200 m² = 2,42 ha.",
             )
+        _fator = _UNIDADES[_unidade]
+
+        with col_gleba:
+            _gleba_display = numero_brl(
+                f"Area da gleba ({_unidade})",
+                value=float(terreno.areas.area_gleba_m2) / _fator,
+                key="aba1_area_gleba",
+                min_value=0.0001,
+            )
+            area_gleba = _gleba_display * _fator
+            if _unidade != "m²":
+                st.caption(f"= {formatar_num(area_gleba, 0)} m²")
         with col_modo:
             usar_pct = st.toggle(
                 "Inserir areas em % da gleba",
@@ -389,7 +409,7 @@ def renderizar() -> None:
             )
 
         def _area_input(label: str, key_m2: str, key_pct: str, valor_m2: float) -> float:
-            """Retorna area em m², seja por input direto ou via % da gleba."""
+            """Retorna area em m², seja por input direto, via % da gleba, ou na unidade selecionada."""
             if usar_pct and area_gleba > 0:
                 pct_atual = valor_m2 / area_gleba * 100 if area_gleba > 0 else 0.0
                 pct = numero_brl(
@@ -403,12 +423,17 @@ def renderizar() -> None:
                 st.caption(f"= {formatar_num(m2, 0)} m²")
                 return m2
             else:
-                return numero_brl(
-                    f"{label} (m²)",
-                    value=valor_m2,
+                _val_display = valor_m2 / _fator
+                _resultado_display = numero_brl(
+                    f"{label} ({_unidade})",
+                    value=_val_display,
                     key=key_m2,
                     min_value=0.0,
                 )
+                m2 = _resultado_display * _fator
+                if _unidade != "m²":
+                    st.caption(f"= {formatar_num(m2, 0)} m²")
+                return m2
 
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -588,7 +613,7 @@ def renderizar() -> None:
         _TIP_HASH_KEY = "aba1_tip_proj_hash"
 
         def _tip_hash(tips: list) -> str:
-            return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario)
+            return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
                         for t in tips])
 
         def _df_vazio() -> pd.DataFrame:
@@ -598,6 +623,7 @@ def renderizar() -> None:
                 "Area do lote (m²)": pd.Series(dtype="float"),
                 "Modo de preco": pd.Series(dtype="str"),
                 "Valor unitario (R$)": pd.Series(dtype="float"),
+                "Ágio (%)": pd.Series(dtype="float"),
             })
 
         _proj_hash = _tip_hash(terreno.tipologias)
@@ -611,6 +637,7 @@ def renderizar() -> None:
                         "Area do lote (m²)": t.area_lote_m2,
                         "Modo de preco": t.modo_preco,
                         "Valor unitario (R$)": t.valor_unitario,
+                        "Ágio (%)": t.gio_percentual,
                     }
                     for t in terreno.tipologias
                 ])
@@ -634,6 +661,13 @@ def renderizar() -> None:
                     options=["por_m2", "por_lote"], required=True
                 ),
                 "Valor unitario (R$)": st.column_config.NumberColumn(min_value=0.01, format="%.2f"),
+                "Ágio (%)": st.column_config.NumberColumn(
+                    min_value=0.0,
+                    format="%.1f",
+                    help="Percentual de ágio sobre o preço padrão para lotes especiais "
+                         "(esquinas, vistas, próximos ao clube). Ex.: 20 = +20% sobre o preço da tipologia. "
+                         "Zero = sem ágio.",
+                ),
             },
             key="aba1_tipologias",
         )
@@ -677,6 +711,7 @@ def renderizar() -> None:
                                     area_lote_m2=float(_row["Area do lote (m²)"]),
                                     modo_preco=str(_row["Modo de preco"]),
                                     valor_unitario=float(_row["Valor unitario (R$)"]),
+                                    gio_percentual=float(_row.get("Ágio (%)", 0.0) or 0.0),
                                 ))
                             except Exception:
                                 pass
@@ -686,6 +721,7 @@ def renderizar() -> None:
                             area_lote_m2=float(_fonte.get("Area do lote (m²)", 0.0) or 0.0),
                             modo_preco=str(_fonte.get("Modo de preco", "por_lote")),
                             valor_unitario=float(_fonte.get("Valor unitario (R$)", 0.0) or 0.0),
+                            gio_percentual=float(_fonte.get("Ágio (%)", 0.0) or 0.0),
                         ))
                         _novo_terreno = projeto.terreno.model_copy(update={"tipologias": _novos})
                         set_projeto(projeto.model_copy(update={"terreno": _novo_terreno}))
@@ -703,9 +739,11 @@ def renderizar() -> None:
                 area_t = float(row.get("Area do lote (m²)", 0) or 0)
                 modo_t = str(row.get("Modo de preco", "por_lote"))
                 valor_t = float(row.get("Valor unitario (R$)", 0) or 0)
+                gio_t = float(row.get("Ágio (%)", 0.0) or 0.0)
                 total_lotes += int(qtd)
                 area_usada += qtd * area_t
-                vgv_total += qtd * area_t * valor_t if modo_t == "por_m2" else qtd * valor_t
+                preco_base = area_t * valor_t if modo_t == "por_m2" else valor_t
+                vgv_total += qtd * preco_base * (1 + gio_t / 100)
             except Exception:
                 continue
 
@@ -784,6 +822,7 @@ def renderizar() -> None:
                         area_lote_m2=float(row["Area do lote (m²)"]),
                         modo_preco=str(row["Modo de preco"]),
                         valor_unitario=float(row["Valor unitario (R$)"]),
+                        gio_percentual=float(row.get("Ágio (%)", 0.0) or 0.0),
                     )
                 )
             except Exception:
@@ -839,6 +878,7 @@ def renderizar() -> None:
                     a.nome != b.nome or a.quantidade != b.quantidade
                     or a.area_lote_m2 != b.area_lote_m2 or a.modo_preco != b.modo_preco
                     or a.valor_unitario != b.valor_unitario
+                    or a.gio_percentual != b.gio_percentual
                     for a, b in zip(atual.tipologias, novo_terreno.tipologias)
                 )
             )
@@ -848,7 +888,7 @@ def renderizar() -> None:
                 invalidar_resultado()
                 # Atualiza hash para nao re-sincronizar o cache na proxima render
                 st.session_state["aba1_tip_proj_hash"] = str(
-                    [(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario)
+                    [(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
                      for t in tipologias]
                 )
     except Exception:

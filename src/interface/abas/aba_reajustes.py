@@ -270,3 +270,83 @@ def renderizar() -> None:
 
     if resultado is None:
         st.info("Clique em **Calcular fluxo de caixa** na sidebar para ver o impacto dos reajustes.")
+        return
+
+    # ================================================================
+    # SECAO 4 — IMPACTO LIQUIDO DOS REAJUSTES
+    # ================================================================
+    st.markdown("---")
+    with st.container(border=True):
+        st.markdown("#### 📊 Impacto Líquido dos Reajustes")
+
+        r_sum = resultado.resumo
+        ind   = resultado.indicadores
+
+        receita_corr  = r_sum.get("receita_correcao_total",     0) or 0
+        var_incc      = r_sum.get("variacao_custo_obras_incc",  0) or 0
+        custo_base    = r_sum.get("custo_obras_base_constante", 0) or 0
+        custo_nominal = r_sum.get("custo_obras",                0) or 0
+        vgv_vendavel  = r_sum.get("vgv_vendavel",               1) or 1
+        lucro         = r_sum.get("lucro_liquido",              0) or 0
+
+        efeito_liquido = receita_corr - var_incc
+        cor_efeito = "normal" if efeito_liquido >= 0 else "inverse"
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(
+                "Receita adicional (correção parcelas)",
+                formatar_brl(receita_corr),
+                help="Correção monetária recebida nas parcelas durante a obra.",
+            )
+        with col2:
+            st.metric(
+                "Acréscimo de custo (INCC obras)",
+                formatar_brl(var_incc),
+                delta=f"{var_incc / custo_base * 100:.1f}% acima do orçamento" if custo_base > 0 and var_incc > 0 else None,
+                delta_color="inverse",
+                help="Quanto o INCC aumenta o custo nominal das obras em relação ao orçamento base.",
+            )
+        with col3:
+            st.metric(
+                "Efeito líquido no resultado",
+                formatar_brl(efeito_liquido),
+                delta=f"{efeito_liquido / vgv_vendavel * 100:.2f} p.p. de margem",
+                delta_color=cor_efeito,
+                help="Receita de correção menos acréscimo de custo = impacto líquido no lucro.",
+            )
+
+        # Resumo textual
+        if efeito_liquido >= 0:
+            st.success(
+                f"✅ Os reajustes beneficiam o projeto em **{formatar_brl(efeito_liquido)}** "
+                f"— a correção das parcelas supera o encarecimento das obras."
+            )
+        else:
+            st.warning(
+                f"⚠️ Os reajustes reduzem o resultado em **{formatar_brl(abs(efeito_liquido))}** "
+                f"— o INCC das obras supera a correção recebida nas parcelas. "
+                f"Considere repassar mais correção ao comprador ou reduzir o prazo de obra."
+            )
+
+        # Tabela de decomposição
+        with st.expander("Ver decomposição detalhada"):
+            st.caption("Comparativo preços constantes vs preços nominais com reajuste")
+            st.table({
+                "Item": [
+                    "Custo obras (orçamento base — preços constantes)",
+                    "Custo obras (nominal com INCC)",
+                    "Acréscimo INCC obras",
+                    "Receita correção parcelas",
+                    "Efeito líquido no resultado",
+                    "Lucro líquido (com reajustes)",
+                ],
+                "Valor (R$)": [
+                    formatar_brl(custo_base),
+                    formatar_brl(custo_nominal),
+                    formatar_brl(var_incc),
+                    formatar_brl(receita_corr),
+                    formatar_brl(efeito_liquido),
+                    formatar_brl(lucro),
+                ],
+            })

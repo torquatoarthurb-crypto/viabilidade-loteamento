@@ -178,11 +178,11 @@ def _linhas_fluxo(ws, row_ini: int, meses: list[int],
     for idx, mes in enumerate(meses):
         row = row_ini + idx
         # Mes
-        cm = ws.cell(row, _C_MES, mes)
-        cm.number_format = _FMT_MES
+        mes_int = int(mes)
+        cm = ws.cell(row, _C_MES, f"M{mes_int}")
         cm.font = _F_S9
         cm.alignment = Alignment(horizontal="center")
-        cm.fill = _fill(_C_STONE if mes % 2 == 0 else _C_WHITE)
+        cm.fill = _fill(_C_STONE if mes_int % 2 == 0 else _C_WHITE)
         # Valores
         for si in range(n_series):
             col = _C_FLOW1 + si
@@ -203,10 +203,12 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     ws.column_dimensions["A"].width = 42
     ws.column_dimensions["B"].width = 26
     ws.column_dimensions["C"].width = 16
+    ws.freeze_panes = "A3"
 
     r  = resultado.resumo
     ind = resultado.indicadores
     p  = projeto.terreno
+    tma = projeto.parametros.tma_anual
 
     def _fmt_rs(v) -> str:
         if v is None:
@@ -239,6 +241,10 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     margem_vb = r.get("margem_sobre_vgv_bruto")
 
     kpis = [
+        ("Horizonte do projeto",         f"{r.get('horizonte_meses', 0)} meses",   False, None),
+        ("Data de inicio (M0)",          p.datas.inicio_projeto.strftime("%m/%Y"), False, None),
+        ("Total de lotes",               f"{p.total_lotes} lotes",                 False, None),
+        ("", "", False, None),
         ("VGV Bruto",                    _fmt_rs(r["vgv_bruto"]),    False, None),
         ("VGV Vendavel",                 _fmt_rs(r["vgv_vendavel"]), False, None),
         ("Receita Total Recebida",       _fmt_rs(r["vgv_total_recebido"]), False, None),
@@ -250,7 +256,9 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         ("Margem s/ VGV Bruto",         _fmt_pct(margem_vb), False, None),
         ("", "", False, None),
         ("TIR (ao ano)",                 f"{tir*100:.2f}%" if tir else "—", True, None),
-        ("VPL",                          _fmt_rs(ind["vpl"]), True,
+        *([("  TIR sem financiamento",   f"{r['tir_anual_sem_fin']*100:.2f}%", False, None)]
+          if projeto.financiamento.ativo and r.get("tir_anual_sem_fin") else []),
+        (f"VPL (TMA {tma:.0f}% a.a.)",  _fmt_rs(ind["vpl"]), True,
          _C_GREEN if ind["vpl"] >= 0 else _C_RED),
         ("Payback Simples",              f"Mes {pb}" if pb else "—", False, None),
         ("Exposicao Maxima de Caixa",   _fmt_rs(ind["exposicao_maxima"]), False, _C_RED),
@@ -277,27 +285,32 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     # DRE
     linha = _sec(ws, linha, "DEMONSTRATIVO DE RESULTADO (DRE)", ncols=3, altura=20)
 
+    vgv_efetivo = r.get("vgv_efetivo_vendavel", r["vgv_vendavel"])
+    ajuste_preco = vgv_efetivo - r["vgv_vendavel"]
+
     dre = [
-        ("VGV Bruto",                               r["vgv_bruto"],          False, _C_STONE),
-        ("  (-) Permuta Fisica / Deducoes",         r["vgv_bruto"] - r["vgv_vendavel"], False, _C_WHITE),
-        ("VGV Vendavel",                             r["vgv_vendavel"],        True,  _C_STONE),
+        ("VGV Bruto (preco base)",                  r["vgv_bruto"],          False, _C_STONE),
+        ("  (-) Permuta Fisica / Deducoes",         -(r["vgv_bruto"] - r["vgv_vendavel"]), False, _C_WHITE),
+        ("VGV Vendavel (preco base)",                r["vgv_vendavel"],        True,  _C_STONE),
+        ("  (+/-) Ajuste Preco Progressivo",        ajuste_preco if abs(ajuste_preco) > 0.01 else None, False, _C_WHITE),
+        ("VGV Efetivo Vendavel",                    vgv_efetivo if abs(ajuste_preco) > 0.01 else None, True, _C_STONE),
         ("  (+) Receita Financeira (Juros)",         r["receita_financeira"],  False, _C_WHITE),
         ("Receita Total Recebida",                   r["vgv_total_recebido"],  True,  _C_STONE),
         ("",                                         None,                     False, _C_WHITE),
-        ("  (-) Aquisicao do Terreno",              r["custo_terreno_aquisicao"], False, _C_WHITE),
-        ("  (-) Cartorio",                           r["custo_terreno_cartorio"], False, _C_WHITE),
-        ("  (-) Obras (com BDI e Contingencia)",    r["custo_obras"],         False, _C_WHITE),
-        ("  (-) Projetos",                          r["custo_projetos"],      False, _C_WHITE),
-        ("  (-) Licenciamento",                     r["custo_licenciamento"], False, _C_WHITE),
-        ("  (-) Marketing",                         r["custo_marketing"],     False, _C_WHITE),
-        ("  (-) Outros Desenvolvimento",            r["custo_outros"],        False, _C_WHITE),
-        ("  (-) Administracao",                     r["custo_administracao"], False, _C_WHITE),
-        ("  (-) Comissao de Vendas",                r["custo_comissao"],      False, _C_WHITE),
-        ("  (-) Impostos / Tributacao",             r["custo_impostos"],      False, _C_WHITE),
-        ("  (-) Permuta Financeira",                r["custo_permuta_financeira"], False, _C_WHITE),
-        ("Total de Saidas",                         r["total_saidas"],         True,  _C_STONE),
-        ("",                                        None,                      False, _C_WHITE),
-        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         r["lucro_liquido"],        True,
+        ("  (-) Aquisicao do Terreno",              -r["custo_terreno_aquisicao"], False, _C_WHITE),
+        ("  (-) Cartorio",                           -r["custo_terreno_cartorio"], False, _C_WHITE),
+        ("  (-) Obras (com BDI e Contingencia)",    -r["custo_obras"],         False, _C_WHITE),
+        ("  (-) Projetos",                          -r["custo_projetos"],      False, _C_WHITE),
+        ("  (-) Licenciamento",                     -r["custo_licenciamento"], False, _C_WHITE),
+        ("  (-) Marketing",                         -r["custo_marketing"],     False, _C_WHITE),
+        ("  (-) Outros Desenvolvimento",            -r["custo_outros"],        False, _C_WHITE),
+        ("  (-) Administracao",                     -r["custo_administracao"], False, _C_WHITE),
+        ("  (-) Comissao de Vendas",                -r["custo_comissao"],      False, _C_WHITE),
+        ("  (-) Impostos / Tributacao",             -r["custo_impostos"],      False, _C_WHITE),
+        ("  (-) Permuta Financeira",                -r["custo_permuta_financeira"], False, _C_WHITE),
+        ("Total de Saidas",                         -r["total_saidas"],         True,  _C_STONE),
+        ("",                                        None,                       False, _C_WHITE),
+        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         r["lucro_liquido"],         True,
          _C_GREEN if r["lucro_liquido"] >= 0 else _C_RED),
     ]
 
@@ -325,12 +338,66 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
             cv.number_format = _FMT_RS
             cv.alignment = Alignment(horizontal="right")
             cv.fill = _fill(cor)
-            cp = ws.cell(linha, 3, val / vgv_b if vgv_b else 0)
+            cp = ws.cell(linha, 3, abs(val) / vgv_b if vgv_b else 0)
             cp.font = _F_N10
             cp.number_format = _FMT_PCT
             cp.alignment = Alignment(horizontal="right")
             cp.fill = _fill(cor)
         linha += 1
+
+    # Secao de financiamento bancario (so quando ativo)
+    if projeto.financiamento.ativo and r.get("custo_financiamento_total"):
+        linha += 1
+        linha = _sec(ws, linha, "FINANCIAMENTO BANCARIO (CCB/CCE)", ncols=3, altura=18)
+        fin = projeto.financiamento
+        itens_fin = [
+            ("Taxa de juros",               f"{fin.taxa_juros_am:.2f}% a.m.  /  {(1+fin.taxa_juros_am/100)**12-1:.2f}% a.a.", False),
+            ("Juros pagos ao banco",        _fmt_rs(r.get("custo_financiamento_juros",  0)), False),
+            ("Comissao de abertura",         _fmt_rs(r.get("custo_financiamento_comissao", 0)), False),
+            ("Custo total do financiamento", _fmt_rs(r.get("custo_financiamento_total",  0)), True),
+            ("Saldo devedor maximo",         _fmt_rs(r.get("saldo_devedor_maximo",        0)), False),
+            ("Saldo devedor remanescente",   _fmt_rs(r.get("saldo_devedor_final",         0)),
+             r.get("saldo_devedor_final", 0) > 1),
+        ]
+        limite_cred = fin.limite_credito_valor
+        saldo_max_v = r.get("saldo_devedor_maximo", 0) or 0
+        for label, val, negrito in itens_fin:
+            cl = ws.cell(linha, 1, label)
+            cl.font = _F_B10 if negrito else _F_N10
+            cv = ws.cell(linha, 2, val)
+            cv.font = _F_B10 if negrito else _F_N10
+            cv.alignment = Alignment(horizontal="right")
+            if label.startswith("Saldo devedor rem") and r.get("saldo_devedor_final", 0) > 1:
+                cv.fill = _fill(_C_RED)
+                cl.fill = _fill(_C_RED)
+            elif label.startswith("Saldo devedor max") and limite_cred > 0 and saldo_max_v > limite_cred:
+                cv.fill = _fill(_C_RED)
+                cl.fill = _fill(_C_RED)
+            linha += 1
+
+    # Secao de reajustes monetarios (so quando ativo)
+    if projeto.reajustes.ativo and (r.get("variacao_custo_obras_incc") or r.get("receita_correcao_total")):
+        linha += 1
+        linha = _sec(ws, linha, "REAJUSTES MONETARIOS", ncols=3, altura=18)
+        reaj      = projeto.reajustes
+        var_incc  = r.get("variacao_custo_obras_incc", 0) or 0
+        corr_parc = r.get("receita_correcao_total",    0) or 0
+        efeito    = corr_parc - var_incc
+        itens_reaj = [
+            ("INCC obras projetado",         f"{reaj.incc_anual_pct:.2f}% a.a." if reaj.aplicar_incc_obras else "—", False),
+            ("Variacao custo obras (INCC)",  _fmt_rs(var_incc)  if var_incc  else "—", False),
+            ("Correcao recebida (parcelas)", _fmt_rs(corr_parc) if corr_parc else "—", False),
+            ("Efeito liquido no resultado",  _fmt_rs(efeito),   True),
+        ]
+        for label, val, negrito in itens_reaj:
+            cl = ws.cell(linha, 1, label)
+            cl.font = _F_B10 if negrito else _F_N10
+            cv = ws.cell(linha, 2, val)
+            cv.font = _F_B10 if negrito else _F_N10
+            cv.alignment = Alignment(horizontal="right")
+            if negrito:
+                cv.fill = _fill(_C_GREEN if efeito >= 0 else _C_RED)
+            linha += 1
 
 
 # =====================================================================
@@ -340,6 +407,7 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
 def _aba_terreno(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> None:
     ws = wb.create_sheet("Terreno")
     _dim_auditoria(ws)
+    ws.freeze_panes = "E5"
 
     p  = projeto.terreno
     df = resultado.fluxo_caixa
@@ -387,13 +455,34 @@ def _aba_terreno(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) ->
     linha = _kv(ws, linha, "Lancamento de vendas", d.lancamento_vendas.strftime("%m/%Y"))
     linha = _kv(ws, linha, "Inicio das obras",     d.inicio_obras.strftime("%m/%Y"))
     linha = _kv(ws, linha, "Termino das obras",    d.termino_obras.strftime("%m/%Y"))
+    linha += 1
 
-    # ---- FLUXO (lado direito) ----
-    colunas_fluxo = ["Rec. Nominal Venda", "Rec. Financeira (Juros)", "Total Entradas"]
+    # ---- AQUISICAO DO TERRENO ----
+    aq = projeto.aquisicao
+    linha = _sec(ws, linha, "AQUISICAO DO TERRENO", ncols=3)
+    linha = _kv(ws, linha, "Valor total",        aq.valor_total,      _FMT_RS,  bold=True)
+    linha = _kv(ws, linha, "Forma de pagamento", aq.forma_pagamento)
+    if aq.forma_pagamento == "a_vista":
+        linha = _kv(ws, linha, "  Mes de pagamento", aq.mes_pagamento, _FMT_INT, unit="mês")
+    elif aq.forma_pagamento == "parcelado":
+        linha = _kv(ws, linha, "  Mes inicio parcelas", aq.mes_inicio_parcelas, _FMT_INT, unit="mês")
+        linha = _kv(ws, linha, "  Qtd parcelas",        aq.qtd_parcelas,        _FMT_INT, unit="parcelas")
+    elif aq.forma_pagamento == "customizado" and aq.fluxo_percentuais:
+        linha = _kv(ws, linha, "  Mes inicio",          aq.fluxo_mes_inicio,    _FMT_INT, unit="mês")
+        linha = _kv(ws, linha, "  Parcelas definidas",  len(aq.fluxo_percentuais), _FMT_INT)
+    elif aq.forma_pagamento == "sem_desembolso":
+        linha = _kv(ws, linha, "  Sem desembolso de caixa — custo embutido no VGV permutado")
+    if aq.custo_cartorio > 0:
+        linha = _kv(ws, linha, "Custo cartorio",         aq.custo_cartorio,      _FMT_RS)
+        linha = _kv(ws, linha, "  Mes pagamento cartorio", aq.mes_pagamento_cartorio, _FMT_INT, unit="mês")
+
+    # ---- FLUXO (lado direito) — Receitas do projeto ----
+    # Rotulado explicitamente para nao ser confundido com desembolso do terreno
+    colunas_fluxo = ["Desemb. Terreno", "Rec. Nominal Venda", "Total Entradas"]
     df_cols = {
-        "Rec. Nominal Venda":        "Receita Nominal Venda",
-        "Rec. Financeira (Juros)":   "Receita Financeira (Juros)",
-        "Total Entradas":            "Total Entradas",
+        "Desemb. Terreno":   "Aquisicao Terreno",
+        "Rec. Nominal Venda": "Receita Nominal Venda",
+        "Total Entradas":    "Total Entradas",
     }
     meses = df["Mes"].tolist()
     series = [[df[col].iloc[i] for i in range(len(df))] for col in df_cols.values() if col in df.columns]
@@ -443,7 +532,8 @@ def _aba_receitas(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -
     for i, faixa in enumerate(rec.curva_vendas, start=1):
         ws.cell(linha, 1, f"Faixa {i}").font = _F_N10
         ws.cell(linha, 2, f"M{faixa.mes_inicio} – M{faixa.mes_fim}").font = _F_N10
-        ws.cell(linha, 3, f"{faixa.percentual_estoque:.1f}%  |  {faixa.fluxo_recebiveis}").font = _F_N10
+        fator_str = f"  |  Fator {faixa.fator_preco:.2f}x" if abs(faixa.fator_preco - 1.0) > 0.001 else ""
+        ws.cell(linha, 3, f"{faixa.percentual_estoque:.1f}%  |  {faixa.fluxo_recebiveis}{fator_str}").font = _F_N10
         linha += 1
     soma_cv = sum(f.percentual_estoque for f in rec.curva_vendas)
     linha = _kv(ws, linha, "SOMA CURVA (deve ser 100%)", soma_cv, _FMT_NUM, bold=True,
@@ -534,11 +624,23 @@ def _aba_obras(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     else:  # resumido
         res = obras.resumido
         if res:
+            areas = projeto.terreno.areas
+            area_base = (
+                areas.area_sistema_viario_m2
+                if res.base_calculo == "sistema_viario"
+                else areas.area_lotes_m2
+            )
+            custo_direto_res = area_base * res.valor_por_m2
+            custo_total_res  = custo_direto_res * multiplicador
+
             linha = _sec(ws, linha, "ORCAMENTO RESUMIDO", ncols=3)
-            linha = _kv(ws, linha, "Base de calculo", res.base_calculo)
-            linha = _kv(ws, linha, "Valor por m2", res.valor_por_m2, _FMT_RS2, unit="R$/m²")
-            linha = _kv(ws, linha, "Mes inicio", res.mes_inicio, _FMT_INT, unit="mês")
-            linha = _kv(ws, linha, "Duracao", res.duracao_meses, _FMT_INT, unit="meses")
+            linha = _kv(ws, linha, "Base de calculo",     res.base_calculo)
+            linha = _kv(ws, linha, "Area utilizada",      area_base,         _FMT_NUM, unit="m²")
+            linha = _kv(ws, linha, "Valor por m2",        res.valor_por_m2,  _FMT_RS2, unit="R$/m²")
+            linha = _kv(ws, linha, "Custo direto",        custo_direto_res,  _FMT_RS,  bold=False)
+            linha = _kv(ws, linha, "Custo total (c/ BDI e Contingencia)", custo_total_res, _FMT_RS, bold=True)
+            linha = _kv(ws, linha, "Mes inicio",          res.mes_inicio,    _FMT_INT, unit="mês")
+            linha = _kv(ws, linha, "Duracao",             res.duracao_meses, _FMT_INT, unit="meses")
 
         colunas_fluxo = ["TOTAL OBRAS"]
         if "Obras" in df.columns:
@@ -855,11 +957,13 @@ def _aba_verificacao_receitas(
         s = f"{n:,}".replace(",", ".")
         return f"R$ {s}" if v >= 0 else f"-R$ {s}"
 
+    vgv_efetivo = r.get("vgv_efetivo_vendavel", vgv_vendavel)
     info = (
-        f"VGV Vendavel: {_rs(vgv_vendavel)}"
-        f"    Principal: {_rs(r['receita_nominal_venda'])}"
-        f"    Juros: {_rs(r['receita_financeira'])}"
-        f"    Total: {_rs(r['vgv_total_recebido'])}"
+        f"VGV Vendavel (base): {_rs(vgv_vendavel)}"
+        + (f"    VGV Efetivo: {_rs(vgv_efetivo)}" if abs(vgv_efetivo - vgv_vendavel) > 1 else "")
+        + f"    Principal: {_rs(r['receita_nominal_venda'])}"
+        + f"    Juros: {_rs(r['receita_financeira'])}"
+        + f"    Total: {_rs(r['vgv_total_recebido'])}"
     )
     cel_info = ws.cell(2, 1, info)
     cel_info.font = _F_B10
@@ -875,7 +979,7 @@ def _aba_verificacao_receitas(
             continue
         fluxo = mapa_fluxos[faixa.fluxo_recebiveis]
         qtd_meses = max(1, faixa.mes_fim - faixa.mes_inicio + 1)
-        vgv_por_mes  = vgv_vendavel * (faixa.percentual_estoque / 100) / qtd_meses
+        vgv_por_mes  = vgv_vendavel * (faixa.percentual_estoque / 100) * faixa.fator_preco / qtd_meses
         lotes_por_mes = total_lotes_vendaveis * (faixa.percentual_estoque / 100) / qtd_meses
 
         for mes_venda in range(faixa.mes_inicio, faixa.mes_fim + 1):
@@ -951,7 +1055,7 @@ def _aba_verificacao_receitas(
     dif_j = abs(total_juros     - r["receita_financeira"])
     ok_p  = "OK" if dif_p < 1.0 else f"DIVERGENCIA: {dif_p:,.0f}"
     ok_j  = "OK" if dif_j < 1.0 else f"DIVERGENCIA: {dif_j:,.0f}"
-    ws.cell(linha,     1, f"Verificacao Principal = VGV Vendavel: {ok_p}").font = _F_B10
+    ws.cell(linha,     1, f"Verificacao Principal = Receita Nominal: {ok_p}").font = _F_B10
     ws.cell(linha + 1, 1, f"Verificacao Juros = Rec. Financeira:  {ok_j}").font = _F_B10
 
     ws.freeze_panes = "A4"

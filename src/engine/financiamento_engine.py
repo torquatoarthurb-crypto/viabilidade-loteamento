@@ -47,6 +47,8 @@ def simular_financiamento(
 
     taxa_m = config.taxa_juros_am / 100
     limite = config.limite_credito_valor  # 0 = sem limite
+    # Caixa minimo que o desenvolvedor mantem sempre disponivel (pode ser 0)
+    caixa_min = max(0.0, config.caixa_minimo)
     saldo_devedor = 0.0
     saldo_caixa = 0.0  # saldo acumulado do desenvolvedor com financiamento
 
@@ -68,9 +70,10 @@ def simular_financiamento(
         if mes == 0 and comissao > 0:
             saldo_caixa -= comissao
 
-        # 4) Se caixa negativo: sacar da linha de credito
-        if saldo_caixa < -0.01:
-            necessario = abs(saldo_caixa)
+        # 4) Se caixa abaixo do minimo: sacar da linha para atingir caixa_minimo
+        #    (sem caixa_minimo, comportamento original: saca so se negativo)
+        if saldo_caixa < caixa_min - 0.01:
+            necessario = caixa_min - saldo_caixa
             if limite <= 0:
                 saque = necessario
             else:
@@ -82,15 +85,17 @@ def simular_financiamento(
                 iof = saque * (config.iof_pct / 100)
                 saldo_devedor += saque + iof
                 saques[mes] = saque
-                saldo_caixa += saque  # caixa volta a zero
+                saldo_caixa += saque  # caixa vai ate caixa_minimo
 
-        # 5) Se caixa positivo e passou carencia: amortizar principal
+        # 5) Se caixa acima do minimo e passou carencia: amortizar so o excedente
+        #    Respeita sempre o caixa_minimo — nunca amortiza o que e reserva
+        excedente = saldo_caixa - caixa_min
         if (
-            saldo_caixa > 0.01
+            excedente > 0.01
             and saldo_devedor > 0.01
             and mes >= config.periodo_carencia_meses
         ):
-            amort = min(saldo_caixa, saldo_devedor)
+            amort = min(excedente, saldo_devedor)
             amortizacoes[mes] = amort
             saldo_devedor -= amort
             saldo_caixa -= amort

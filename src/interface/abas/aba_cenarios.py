@@ -149,6 +149,7 @@ def _salvar_cenario(nome: str, projeto, resultado) -> None:
         "exposicao": ind.get("exposicao_maxima"),
         "payback": ind.get("payback_simples_meses"),
         "margem": r.get("margem_sobre_vgv_vendavel"),
+        "custo_financeiro": r.get("custo_financiamento_total", 0),
         "projeto_json": projeto.model_dump_json(),
     })
     if len(st.session_state[CHAVE_CENARIOS]) > 10:
@@ -181,12 +182,31 @@ def _mostrar_tabela_cenarios(cenarios: list) -> None:
     def fm(v: float | None) -> str:
         if v is None:
             return "—"
-        return f"R$ {v / 1_000_000:.1f}M"
+        av = abs(v)
+        if av >= 1_000_000:
+            return f"R$ {v / 1_000_000:.1f}M"
+        return f"R$ {v / 1_000:.0f}k"
+
+    def fexp(v: float | None) -> str:
+        if v is None:
+            return "—"
+        av = abs(v)
+        txt = f"R$ {av / 1_000_000:.1f}M" if av >= 1_000_000 else f"R$ {av / 1_000:.0f}k"
+        return txt
+
+    def ffin(v) -> str:
+        if not v:
+            return "—"
+        v = float(v)
+        if v < 1:
+            return "—"
+        return f"R$ {v / 1_000_000:.1f}M" if v >= 1_000_000 else f"R$ {v / 1_000:.0f}k"
 
     thead = (
         "<thead><tr>"
         "<th>Nome</th><th>Salvo</th><th>VGV</th><th>Lucro</th>"
         "<th>Margem</th><th>TIR</th><th>VPL</th><th>Payback</th>"
+        "<th>Exposicao</th><th>Custo Fin.</th>"
         "</tr></thead>"
     )
     linhas = ""
@@ -202,6 +222,8 @@ def _mostrar_tabela_cenarios(cenarios: list) -> None:
             f"<td style='color:#34D399'>{ft(c.get('tir'))}</td>"
             f"<td>{fm(c.get('vpl'))}</td>"
             f"<td>{str(pb) + 'm' if pb else '—'}</td>"
+            f"<td style='color:#F87171'>{fexp(c.get('exposicao'))}</td>"
+            f"<td style='color:#FBBF24'>{ffin(c.get('custo_financeiro'))}</td>"
             f"</tr>"
         )
     st.markdown(

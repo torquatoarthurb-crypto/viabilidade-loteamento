@@ -46,6 +46,15 @@ class ConfigFinanciamento(BaseModel):
         default=0.38, ge=0.0, le=5.0,
         description="IOF sobre cada saque %",
     )
+    caixa_minimo: float = Field(
+        default=0.0, ge=0.0,
+        description=(
+            "Reserva de caixa minimo que o sistema mantem sempre disponivel. "
+            "O banco saca quando o caixa cair abaixo desse valor (nao so quando for negativo). "
+            "O sistema so amortiza o que exceder esse valor. "
+            "Ex.: 500000 = manter sempre R$ 500k em caixa. Retrocompat: 0 = comportamento antigo."
+        ),
+    )
 
 
 class AquisicaoTerreno(BaseModel):

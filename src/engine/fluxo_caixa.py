@@ -233,6 +233,7 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
     resumo = {
         "vgv_bruto": projeto.terreno.vgv_bruto,
         "vgv_vendavel": vgv_vendavel,
+        "vgv_efetivo_vendavel": rec_data.get("vgv_efetivo_vendavel", vgv_vendavel),
         "vgv_total_recebido": float(recebimentos.sum()),
         "receita_nominal_venda": float(recebimentos_principal.sum()),
         "receita_financeira": float(recebimentos_juros.sum()),
