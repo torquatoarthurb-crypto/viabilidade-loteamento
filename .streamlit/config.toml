@@ -1,6 +1,6 @@
 [theme]
 base = "light"
-primaryColor = "#1E3A8A"
+primaryColor = "#B07D2E"
 backgroundColor = "#F5F3EE"
 secondaryBackgroundColor = "#ECEAE4"
 textColor = "#1A1916"
@@ -13,3 +13,7 @@ runOnSave = false
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+showErrorDetails = false

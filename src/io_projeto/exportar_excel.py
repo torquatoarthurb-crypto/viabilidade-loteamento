@@ -37,12 +37,12 @@ from ..modelos import Projeto
 # PALETA ALTIPLANO
 # =====================================================================
 
-_C_DARK    = "2C2A27"   # cabecalho escuro
-_C_OCHRE   = "1E3A8A"   # azul naval — secoes principais
-_C_OCHRE_L = "BFDBFE"   # azul claro — subsecoes
+_C_DARK    = "1A1916"   # carvão Altiplano
+_C_OCHRE   = "B07D2E"   # ocre Altiplano — seções principais
+_C_OCHRE_L = "F5EED8"   # ocre claro — subseções
 _C_STONE   = "F5F3EE"   # pedra clara
-_C_STONE_D = "ECEAE4"   # pedra media
-_C_FLOW_H  = "1E2F6E"   # azul naval escuro — cabecalho do fluxo
+_C_STONE_D = "ECEAE4"   # pedra média
+_C_FLOW_H  = "2C2A27"   # carvão escuro — cabeçalho do fluxo
 _C_GREEN   = "D4EAD9"   # verde suave — resultado positivo
 _C_RED     = "F5E8E8"   # vermelho suave — resultado negativo
 _C_WHITE   = "FFFFFF"

@@ -10,6 +10,7 @@ Componentes visuais Altiplano:
 
 from __future__ import annotations
 
+import base64
 import streamlit as st
 
 
@@ -17,32 +18,38 @@ import streamlit as st
 # LOGO — elipses concentricas (SVG inline)
 # =====================================================================
 
-_LOGO_SVG_CLARO = """
-<svg width="46" height="38" viewBox="0 0 32 26" fill="none">
-  <ellipse cx="16" cy="13" rx="14.5" ry="6.5" stroke="#F5F3EE" stroke-width="0.9" opacity="0.22"/>
-  <ellipse cx="16" cy="13" rx="10.5" ry="4.5" stroke="#F5F3EE" stroke-width="1.1" opacity="0.45"/>
-  <ellipse cx="16" cy="13" rx="6"    ry="2.5" stroke="#F5F3EE" stroke-width="1.5" opacity="0.75"/>
-  <ellipse cx="16" cy="13" rx="2.2"  ry="0.9" fill="#FFFFFF"/>
-</svg>
-"""
+_LOGO_SVG_CLARO = (
+    '<svg width="46" height="38" viewBox="0 0 32 26" fill="none">'
+    '<ellipse cx="16" cy="13" rx="14.5" ry="6.5" stroke="#F5F3EE" stroke-width="0.9" opacity="0.22"/>'
+    '<ellipse cx="16" cy="13" rx="10.5" ry="4.5" stroke="#F5F3EE" stroke-width="1.1" opacity="0.45"/>'
+    '<ellipse cx="16" cy="13" rx="6" ry="2.5" stroke="#F5F3EE" stroke-width="1.5" opacity="0.75"/>'
+    '<ellipse cx="16" cy="13" rx="2.2" ry="0.9" fill="#FFFFFF"/>'
+    '</svg>'
+)
 
-_LOGO_SVG_ESCURO = """
-<svg width="40" height="32" viewBox="0 0 32 26" fill="none">
-  <ellipse cx="16" cy="13" rx="14.5" ry="6.5" stroke="#1A1916" stroke-width="0.9" opacity="0.18"/>
-  <ellipse cx="16" cy="13" rx="10.5" ry="4.5" stroke="#1A1916" stroke-width="1.1" opacity="0.38"/>
-  <ellipse cx="16" cy="13" rx="6"    ry="2.5" stroke="#1A1916" stroke-width="1.5" opacity="0.65"/>
-  <ellipse cx="16" cy="13" rx="2.2"  ry="0.9" fill="#1E3A8A"/>
-</svg>
-"""
+_LOGO_SVG_ESCURO = (
+    '<svg width="40" height="32" viewBox="0 0 32 26" fill="none">'
+    '<ellipse cx="16" cy="13" rx="14.5" ry="6.5" stroke="#1A1916" stroke-width="0.9" opacity="0.18"/>'
+    '<ellipse cx="16" cy="13" rx="10.5" ry="4.5" stroke="#1A1916" stroke-width="1.1" opacity="0.38"/>'
+    '<ellipse cx="16" cy="13" rx="6" ry="2.5" stroke="#1A1916" stroke-width="1.5" opacity="0.65"/>'
+    '<ellipse cx="16" cy="13" rx="2.2" ry="0.9" fill="#B07D2E"/>'
+    '</svg>'
+)
+
+def _svg_img(svg: str) -> str:
+    b64 = base64.b64encode(svg.encode()).decode()
+    return f'<img src="data:image/svg+xml;base64,{b64}" style="display:block;">'
+
+_LOGO_IMG_CLARO  = _svg_img(_LOGO_SVG_CLARO)
+_LOGO_IMG_ESCURO = _svg_img(_LOGO_SVG_ESCURO)
 
 
 def renderizar_logo_sidebar() -> None:
     """Renderiza o logo Altiplano + wordmark no topo da sidebar."""
-    svg = _LOGO_SVG_CLARO.strip()
     html = (
         '<div style="display:flex;align-items:center;gap:12px;'
         'padding:20px 14px 16px;border-bottom:0.5px solid #2A2825;margin-bottom:4px;">'
-        + svg
+        + _LOGO_IMG_CLARO
         + '<div>'
         '<div style="font-family:\'DM Serif Display\',serif;font-size:22px;'
         'color:#F5F3EE;letter-spacing:0.02em;line-height:1.1;">Altiplano</div>'
@@ -63,7 +70,7 @@ def renderizar_header_principal(projeto, modulo_atual: str) -> None:
     html = f"""
     <div class="header-principal">
         <div class="breadcrumb">
-            {_LOGO_SVG_ESCURO.strip()}
+            {_LOGO_IMG_ESCURO}
             <span style="color:#C4C1B8;">›</span>
             <span class="item-ativo">{nome_projeto}</span>
             <span style="color:#C4C1B8;">›</span>
@@ -78,12 +85,7 @@ def renderizar_header_principal(projeto, modulo_atual: str) -> None:
 def renderizar_titulo_modulo(titulo: str, numero: int, total: int = 9) -> None:
     html = f"""
     <div class="modulo-titulo">
-        <div style="font-size:10px;font-weight:500;letter-spacing:0.12em;
-                    text-transform:uppercase;color:#8A8880;margin-bottom:4px;">
-            {str(numero).zfill(2)} · Módulo
-        </div>
         <h1>{titulo}</h1>
-        <div class="modulo-subtitulo">Módulo {numero} de {total}</div>
     </div>
     """
     st.markdown(html, unsafe_allow_html=True)
@@ -98,18 +100,20 @@ def renderizar_kpi_card(
     valor: str,
     sub: str = "",
     cor: str = "neutro",
+    help: str = "",
 ) -> str:
     """
     Devolve HTML de um card KPI Altiplano.
     cor: 'verde' | 'vermelho' | 'atencao' | 'neutro' | 'neutro-azul'
+    help: texto de tooltip exibido ao passar o mouse sobre o card.
     """
-    # Mapear aliases legados
     _alias = {"neutro": "neutro", "azul": "neutro-azul"}
     cor_cls = _alias.get(cor, cor)
 
     sub_html = f'<div class="kpi-sub">{sub}</div>' if sub else ""
+    title_attr = f' title="{help}"' if help else ""
     return (
-        f'<div class="kpi-card {cor_cls}">'
+        f'<div class="kpi-card {cor_cls}"{title_attr}>'
         f'<div class="kpi-label">{label}</div>'
         f'<div class="kpi-valor">{valor}</div>'
         f'{sub_html}'
@@ -120,7 +124,7 @@ def renderizar_kpi_card(
 def renderizar_grade_kpis(kpis: list[dict]) -> None:
     """
     Grade 4xN de cards KPI.
-    kpis: lista de dicts {label, valor, sub?, cor?}
+    kpis: lista de dicts {label, valor, sub?, cor?, help?}
     """
     if not kpis:
         return
@@ -140,6 +144,7 @@ def renderizar_grade_kpis(kpis: list[dict]) -> None:
                     kpi["valor"],
                     kpi.get("sub", ""),
                     kpi.get("cor", "neutro"),
+                    kpi.get("help", ""),
                 )
                 cards_html += f'<div style="flex:1;">{card}</div>'
 

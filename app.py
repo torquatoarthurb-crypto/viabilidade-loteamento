@@ -47,8 +47,8 @@ from src.interface.validacoes import status_aba, validar_projeto_completo
 
 
 st.set_page_config(
-    page_title="Viabilidade de Loteamento",
-    page_icon="📊",
+    page_title="Altiplano Viabilidade",
+    page_icon="assets/favicon.svg",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -59,19 +59,19 @@ st.set_page_config(
 # ============================================================
 
 MODULOS = [
-    {"numero": 8,  "nome": "Dashboard",      "icone": "📊"},
-    {"numero": 1,  "nome": "Empreendimento", "icone": "📋"},
-    {"numero": 9,  "nome": "Terreno",        "icone": "🏡"},
-    {"numero": 2,  "nome": "Receitas",       "icone": "💰"},
-    {"numero": 3,  "nome": "Obras",          "icone": "🏗️"},
-    {"numero": 4,  "nome": "Incorporação",   "icone": "📊"},
-    {"numero": 5,  "nome": "Impostos",       "icone": "📑"},
-    {"numero": 7,  "nome": "Fluxo de Caixa", "icone": "💹"},
-    {"numero": 10, "nome": "Ferramentas",    "icone": "🔧"},
-    {"numero": 11, "nome": "Cenários",       "icone": "🎲"},
-    {"numero": 12, "nome": "Projetos",       "icone": "📁"},
-    {"numero": 13, "nome": "Financiamento",  "icone": "🏦"},
-    {"numero": 14, "nome": "Reajustes",      "icone": "📊"},
+    {"numero": 8,  "nome": "Resultado",           "icone": "📊"},
+    {"numero": 1,  "nome": "Identificação",       "icone": "📋"},
+    {"numero": 9,  "nome": "Aquisição do Terreno","icone": "🏡"},
+    {"numero": 3,  "nome": "Custos de Obra",      "icone": "🏗️"},
+    {"numero": 2,  "nome": "Receitas",            "icone": "💰"},
+    {"numero": 4,  "nome": "Despesas Indiretas",  "icone": "📎"},
+    {"numero": 5,  "nome": "Tributação",          "icone": "📑"},
+    {"numero": 7,  "nome": "Fluxo de Caixa",      "icone": "💹"},
+    {"numero": 10, "nome": "Ferramentas",         "icone": "🔧"},
+    {"numero": 11, "nome": "Cenários",            "icone": "🎲"},
+    {"numero": 12, "nome": "Projetos",            "icone": "📁"},
+    {"numero": 13, "nome": "Financiamento",       "icone": "🏦"},
+    {"numero": 14, "nome": "Reajustes",           "icone": "📈"},
 ]
 
 

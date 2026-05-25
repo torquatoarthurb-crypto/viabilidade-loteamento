@@ -426,7 +426,7 @@ def renderizar() -> None:
     tipologias = projeto.terreno.tipologias
 
     if not tipologias:
-        aviso_validacao("Cadastre tipologias na Aba 1 antes de configurar receitas.")
+        aviso_validacao("Cadastre tipologias em Identificação (sidebar → Dados) antes de configurar receitas.")
         return
 
     horizonte = horizonte_visual_projeto(projeto)

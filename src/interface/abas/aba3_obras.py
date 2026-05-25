@@ -139,7 +139,7 @@ def renderizar() -> None:
 
     # Areas de referencia
     st.info(
-        f"**Areas de referencia (Aba 1):**  \n"
+        f"**Áreas de referência (Identificação):**  \n"
         f"Sistema viario = {formatar_num(areas.area_sistema_viario_m2)} m² | "
         f"Area de lotes = {formatar_num(areas.area_lotes_m2)} m² | "
         f"Gleba = {formatar_num(areas.area_gleba_m2)} m²"
@@ -148,6 +148,11 @@ def renderizar() -> None:
     # ============================================================
     # MODO DO ORCAMENTO
     # ============================================================
+    # Pre-inicializa do modelo para que a volta ao modulo restaure o modo correto.
+    # O widget usa session_state["aba3_modo"]; se nao estiver definido, usa obras.modo.
+    if "aba3_modo" not in st.session_state:
+        st.session_state["aba3_modo"] = obras.modo
+
     st.markdown("#### Modo do Orcamento")
     modo = st.radio(
         "Como voce quer inserir o orcamento?",
@@ -156,7 +161,6 @@ def renderizar() -> None:
             "resumido": "Resumido (R$/m² + tabela mensal unica)",
             "detalhado": "Detalhado (lista de etapas com tabela mensal)",
         }[x],
-        index=0 if obras.modo == "resumido" else 1,
         horizontal=True,
         key="aba3_modo",
     )
@@ -606,8 +610,17 @@ def renderizar() -> None:
                     curva="customizada",
                     curva_customizada=lista_pct,
                 )
+                # Salva modo="resumido" para que a volta ao modulo restaure o radio.
+                # etapas tambem populada para o engine de calculo.
                 nova_aba = Aba3Obras(
-                    modo="detalhado",
+                    modo="resumido",
+                    resumido=OrcamentoResumido(
+                        base_calculo=valor_resumido_inputs["base_calculo"],
+                        valor_por_m2=valor_resumido_inputs["valor_por_m2"],
+                        mes_inicio=mes_min,
+                        duracao_meses=duracao,
+                        curva="s_curve",
+                    ),
                     etapas=[etapa_unica],
                     bdi_percentual=bdi,
                     contingencia_percentual=contingencia,

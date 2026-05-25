@@ -404,7 +404,7 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
 
     tipologias = projeto.terreno.tipologias
     if not tipologias:
-        aviso_validacao("Cadastre tipologias na Aba 1 (Dados do Empreendimento) antes de configurar a permuta fisica.")
+        aviso_validacao("Cadastre tipologias em Identificação (sidebar → Dados) antes de configurar a permuta física.")
         return []
 
     st.markdown("---")

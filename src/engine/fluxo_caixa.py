@@ -200,7 +200,16 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
     # ----- 9b. FINANCIAMENTO BANCARIO (A1) -----
     fin_data = None
     if projeto.financiamento.ativo:
-        fin_data = simular_financiamento(fluxo_base, projeto.financiamento, horizonte)
+        # Vetores acumulados para os gatilhos de liberacao (0-100%)
+        _total_obras = float(obras_total.sum())
+        _total_vgv = float(vgv_vendavel) if vgv_vendavel > 0 else 1.0
+        pct_obras_acum = np.cumsum(obras_total) / max(_total_obras, 1.0) * 100
+        pct_vendas_acum = np.cumsum(vendas_vgv) / _total_vgv * 100
+        fin_data = simular_financiamento(
+            fluxo_base, projeto.financiamento, horizonte,
+            pct_vendas_acum=pct_vendas_acum,
+            pct_obras_acum=pct_obras_acum,
+        )
 
         comissao_vec = np.zeros(n)
         if fin_data["comissao_abertura"] > 0:

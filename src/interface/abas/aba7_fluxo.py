@@ -97,8 +97,8 @@ def _renderizar_memoria_calculo(r: dict, ind: dict, projeto) -> None:
         st.markdown("**Payback**")
         pb_s = ind.get("payback_simples_meses")
         pb_d = ind.get("payback_descontado_meses")
-        st.caption(f"Simples: **{pb_s} meses**" if pb_s else "Simples: n/d")
-        st.caption(f"Descontado (TMA): **{pb_d} meses**" if pb_d else "Descontado: n/d")
+        st.caption(f"Simples: **{pb_s} meses**" if pb_s else "Simples: —")
+        st.caption(f"Descontado (TMA): **{pb_d} meses**" if pb_d else "Descontado: —")
         exp = ind.get("exposicao_maxima", 0)
         st.caption(f"Exposicao max: **{formatar_brl(exp)}** (M{ind.get('mes_exposicao_maxima', '?')})")
 
@@ -117,8 +117,8 @@ def _autosave_tma(tma: float) -> None:
 def renderizar() -> None:
     cabecalho_aba(
         7,
-        "Fluxo de Caixa e TMA",
-        "Taxa Minima de Atratividade e indicadores. 💾 Salvo automaticamente.",
+        "Fluxo de Caixa",
+        "Taxa Mínima de Atratividade (TMA) e fluxo detalhado do projeto.",
     )
 
     projeto = get_projeto()
@@ -188,26 +188,59 @@ def renderizar() -> None:
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("VGV bruto", formatar_brl(r["vgv_bruto"]))
+        st.metric(
+            "VGV bruto",
+            formatar_brl(r["vgv_bruto"]),
+            help="Valor Geral de Vendas — somatório de todos os lotes pelo preço cheio, antes de descontar permutas físicas.",
+        )
     with col2:
-        st.metric("Lucro liquido", formatar_brl(r["lucro_liquido"]))
+        st.metric(
+            "Lucro liquido",
+            formatar_brl(r["lucro_liquido"]),
+            help="Receita total recebida menos todas as saídas (terreno, obras, incorporação, comissão, impostos e financiamento).",
+        )
     with col3:
-        st.metric("VPL", formatar_brl(vpl), delta=vpl_delta)
+        st.metric(
+            "VPL",
+            formatar_brl(vpl),
+            delta=vpl_delta,
+            help="Valor Presente Líquido — fluxo de caixa descontado pela TMA. Positivo = projeto gera valor acima do custo de oportunidade.",
+        )
     with col4:
-        st.metric("TIR (a.a.)", formatar_pct(tir_anual) if tir_anual is not None else "n/d",
-                  delta=tir_delta)
+        st.metric(
+            "TIR (a.a.)",
+            formatar_pct(tir_anual) if tir_anual is not None else "—",
+            delta=tir_delta,
+            help="Taxa Interna de Retorno anual — taxa que zera o VPL. Calculada por Newton-Raphson. Compare com a TMA para decidir a viabilidade.",
+        )
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Exposicao maxima", formatar_brl(ind["exposicao_maxima"]))
+        st.metric(
+            "Exposicao maxima",
+            formatar_brl(ind["exposicao_maxima"]),
+            help="Maior saldo acumulado negativo do projeto — capital próprio máximo que precisa estar disponível simultaneamente.",
+        )
     with col2:
-        st.metric("Mes da exposicao", f"M{ind['mes_exposicao_maxima']}")
+        st.metric(
+            "Mes da exposicao",
+            f"M{ind['mes_exposicao_maxima']}",
+            help="Mês em que ocorre o pico de exposição de capital. Útil para planejar o timing do aporte ou do financiamento bancário.",
+        )
     with col3:
         pb_s = ind.get("payback_simples_meses")
-        st.metric("Payback simples", f"{pb_s} meses" if pb_s is not None else "n/d")
+        st.metric(
+            "Payback simples",
+            f"{pb_s} meses" if pb_s is not None else "—",
+            help="Mês em que o saldo acumulado cruza o zero, sem descontar o custo do capital. Referência rápida de liquidez do projeto.",
+        )
     with col4:
         pb_d = ind.get("payback_descontado_meses")
-        st.metric("Payback descontado", f"{pb_d} meses" if pb_d is not None else "n/d")
+        st.metric(
+            "Payback descontado",
+            f"{pb_d} meses" if pb_d is not None else "—",
+            help="Mês em que o saldo acumulado descontado pela TMA cruza o zero. Mais conservador que o simples — considera o custo de oportunidade do capital ao longo do tempo.",
+        )
 
     with st.expander("🔍 Memória de Cálculo", expanded=False):
         _renderizar_memoria_calculo(r, ind, projeto)

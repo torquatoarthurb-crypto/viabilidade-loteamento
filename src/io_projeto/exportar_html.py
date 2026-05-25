@@ -446,7 +446,7 @@ body {{ font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 9.
 /* Capa */
 .capa {{ border-bottom: 3px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 16px;
   display: flex; justify-content: space-between; align-items: flex-end; }}
-.capa-left h1 {{ color: #1e3a5f; font-size: 18pt; letter-spacing: -0.5px; margin-bottom: 3px; }}
+.capa-left h1 {{ color: #1A1916; font-size: 18pt; letter-spacing: -0.5px; margin-bottom: 3px; }}
 .capa-left .sub  {{ color: #475569; font-size: 10pt; }}
 .capa-left .meta {{ color: #94a3b8; font-size: 8pt; margin-top: 4px; }}
 .capa-right {{ text-align: right; }}
@@ -468,13 +468,13 @@ body {{ font-family: Arial, Helvetica, sans-serif; color: #1e293b; font-size: 9.
 
 /* Tabelas */
 table.t {{ width: 100%; border-collapse: collapse; font-size: 9pt; page-break-inside: avoid; }}
-table.t thead th {{ background: #1e3a5f; color: white; padding: 5px 8px; text-align: left; }}
+table.t thead th {{ background: #1A1916; color: white; padding: 5px 8px; text-align: left; }}
 table.t tbody td {{ padding: 3px 8px; border-bottom: 1px solid #f1f5f9; }}
 tr.sub {{ background: #dbeafe !important; font-weight: 700; }}
 tr.res {{ font-weight: 700; font-size: 10pt; background: {res_bg} !important; }}
 
 table.ttipo {{ width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-top: 6px; }}
-table.ttipo thead th {{ background: #1e3a5f; color: white; padding: 5px 8px; }}
+table.ttipo thead th {{ background: #1A1916; color: white; padding: 5px 8px; }}
 table.ttipo tbody td {{ padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }}
 tr.ttotal {{ font-weight: 700; background: #dbeafe !important; }}
 
@@ -531,7 +531,7 @@ tr.ttotal {{ font-weight: 700; background: #dbeafe !important; }}
 <div class="kpi-grid">
   <div class="kpi">
     <div class="kpi-label">VGV Bruto (preco base)</div>
-    <div class="kpi-value" style="color:#1e3a5f">{_fmt_brl(vgv_bruto)}</div>
+    <div class="kpi-value" style="color:#1A1916">{_fmt_brl(vgv_bruto)}</div>
     <div class="kpi-sub">{total_lotes} lotes &nbsp;|&nbsp; {_fmt_brl(vgv_p_lote)} / lote</div>
   </div>
   <div class="kpi">
@@ -556,7 +556,7 @@ tr.ttotal {{ font-weight: 700; background: #dbeafe !important; }}
   </div>
   <div class="kpi">
     <div class="kpi-label">Payback Simples</div>
-    <div class="kpi-value" style="color:#1e3a5f">{str(payback) + " meses" if payback else "—"}</div>
+    <div class="kpi-value" style="color:#1A1916">{str(payback) + " meses" if payback else "—"}</div>
     <div class="kpi-sub">&nbsp;</div>
   </div>
   <div class="kpi">

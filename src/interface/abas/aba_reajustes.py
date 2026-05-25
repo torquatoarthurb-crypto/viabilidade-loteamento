@@ -269,7 +269,7 @@ def renderizar() -> None:
     })
 
     if resultado is None:
-        st.info("Clique em **Calcular fluxo de caixa** na sidebar para ver o impacto dos reajustes.")
+        st.info("Clique em **Calcular viabilidade** na sidebar para ver o impacto dos reajustes.")
         return
 
     # ================================================================

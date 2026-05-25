@@ -56,6 +56,26 @@ class ConfigFinanciamento(BaseModel):
         ),
     )
 
+    # ---- Gatilhos de liberacao do financiamento ----
+    gatilho_tipo: Literal["nenhum", "vendas", "obras", "ambos"] = Field(
+        default="nenhum",
+        description=(
+            "Condicao para que o sistema comece a sacar da linha. "
+            "'nenhum' = saca a qualquer momento (comportamento padrao). "
+            "'vendas' = so saca apos X% do VGV vendavel ser contratado. "
+            "'obras' = so saca apos X% do custo total de obras ser desembolsado. "
+            "'ambos' = ambas as condicoes devem ser atingidas simultaneamente."
+        ),
+    )
+    gatilho_vendas_pct: float = Field(
+        default=20.0, ge=0.0, le=100.0,
+        description="% do VGV vendavel contratado necessario para liberar o financiamento.",
+    )
+    gatilho_obras_pct: float = Field(
+        default=30.0, ge=0.0, le=100.0,
+        description="% do custo total de obras desembolsado necessario para liberar o financiamento.",
+    )
+
 
 class AquisicaoTerreno(BaseModel):
     """

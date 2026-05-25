@@ -176,11 +176,10 @@ def renderizar() -> None:
         except Exception:
             pass
 
-        # UX-07: hint sobre Modulo 9
         st.info(
-            "💡 Clique em **'Calcular fluxo'** nas Acoes do projeto (sidebar) "
+            "💡 Clique em **'Calcular viabilidade'** na sidebar "
             "para ver os indicadores completos.  \n"
-            "🏡 Lembre-se de configurar a **aquisição do terreno** no Módulo 9 "
+            "🏡 Lembre-se de configurar a **Aquisição do Terreno** (sidebar → Dados) "
             "antes de calcular."
         )
         return
@@ -226,7 +225,7 @@ def renderizar() -> None:
     vpl_sub = "✅ Projeto viavel" if vpl > 0 else "❌ Projeto inviavel"
 
     # UX-13: payback com referencia ao horizonte
-    pb_valor = f"Mes {pb}" if pb else "n/d"
+    pb_valor = f"M{pb}" if pb else "—"
     pb_sub = f"de {horizonte} meses no projeto" if (pb and horizonte > 0) else ""
 
     kpis = [
@@ -248,7 +247,7 @@ def renderizar() -> None:
         },
         {
             "label": "TIR Anual",
-            "valor": f"{tir*100:.2f}%" if tir is not None else "n/d",
+            "valor": f"{tir*100:.1f}%" if tir is not None else "—",
             "sub": tir_sub,
             "cor": tir_cor,
         },
@@ -289,6 +288,6 @@ def renderizar() -> None:
             'margin:16px 0 0 0;">'
             '💡 <b>Reajustes monetários não ativados</b> — o custo de obras pode estar '
             'subestimado sem a correção pelo INCC. Configure no '
-            '<b>Módulo 14 — Reajustes</b>.</div>',
+            '<b>Reajustes</b> (sidebar → Avançado → Reajustes).</div>',
             unsafe_allow_html=True,
         )

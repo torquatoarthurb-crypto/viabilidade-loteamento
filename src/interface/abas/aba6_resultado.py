@@ -214,22 +214,22 @@ def _renderizar_cards_margem(r: dict, ind: dict) -> None:
     kpis = [
         {
             "label": "Margem s/ VGV Vendavel",
-            "valor": formatar_pct(margem_vv) if margem_vv is not None else "n/d",
+            "valor": formatar_pct(margem_vv) if margem_vv is not None else "—",
             "cor": cor_margem(margem_vv),
         },
         {
             "label": "Margem s/ VGV Bruto",
-            "valor": formatar_pct(margem_vb) if margem_vb is not None else "n/d",
+            "valor": formatar_pct(margem_vb) if margem_vb is not None else "—",
             "cor": cor_margem(margem_vb),
         },
         {
             "label": "Multiplicador (Lucro / Exposicao)",
-            "valor": f"{multiplicador:.2f}x".replace(".", ",") if multiplicador else "n/d",
+            "valor": f"{multiplicador:.2f}x".replace(".", ",") if multiplicador else "—",
             "cor": "verde" if (multiplicador and multiplicador > 1) else "neutro",
         },
         {
             "label": "TIR Anual",
-            "valor": formatar_pct(tir) if tir is not None else "n/d",
+            "valor": formatar_pct(tir) if tir is not None else "—",
             "cor": "verde" if (tir and tir > 0.10) else "neutro",
         },
     ]

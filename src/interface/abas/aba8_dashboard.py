@@ -109,22 +109,9 @@ _COR_NOMINAL = "#3D8B5E"
 _COR_JUROS   = "#2E6B47"
 
 _BG_LINHAS: dict[str, str] = {
-    "Receita Nominal Venda":      "#EEF6F0",
-    "Receita Financeira (Juros)": "#EEF6F0",
     "Total Entradas":             "#D4EAD9",
-    "Aquisicao Terreno":          "#FBF0F0",
-    "Cartorio":                   "#FBF0F0",
-    "Obras":                      "#FBF0F0",
-    "Projetos":                   "#FBF0F0",
-    "Licenciamento":              "#FBF0F0",
-    "Marketing":                  "#FBF0F0",
-    "Outros Desenvolvimento":     "#FBF0F0",
-    "Administracao":              "#FBF0F0",
-    "Comissao":                   "#FBF0F0",
-    "Impostos":                   "#FBF0F0",
-    "Permuta Financeira":         "#FBF0F0",
     "Total Saidas":               "#F5D0D0",
-    "Saldo do Mes":               "#F5F3EE",
+    "Saldo do Mes":               "#ECEAE4",
     "Saldo Acumulado":            "#ECEAE4",
     "Saldo Descontado Acumulado": "#ECEAE4",
 }
@@ -140,10 +127,11 @@ _NEGRITO_LINHAS = {"Total Entradas", "Total Saidas", "Saldo Acumulado"}
 
 def _fmt_m(v: float) -> str:
     av = abs(v)
+    sign = "-" if v < 0 else ""
     if av >= 1_000_000:
-        return f"R$ {v / 1_000_000:.1f}M".replace(".", ",")
+        return f"{sign}R$ {av / 1_000_000:.1f}M".replace(".", ",")
     if av >= 1_000:
-        return f"R$ {v / 1_000:.0f}k"
+        return f"{sign}R$ {av / 1_000:.0f}k"
     return formatar_brl(v)
 
 
@@ -257,64 +245,173 @@ def _renderizar_pre_calc(projeto) -> None:
         pass
 
     st.info(
-        "💡 Clique em **'Calcular fluxo'** nas Ações do projeto (sidebar) "
+        "💡 Clique em **'Calcular viabilidade'** na sidebar "
         "para ver os indicadores completos.  \n"
-        "🏡 Lembre-se de configurar a **aquisição do terreno** no Módulo 9 "
+        "🏡 Lembre-se de configurar a **Aquisição do Terreno** (sidebar → Dados) "
         "antes de calcular."
     )
 
 
 # =====================================================================
-# KPIs TOPO — VERSAO COMPLETA COM VEREDITO TIR/TMA (ABA 0)
+# BADGE DE VEREDITO — VIAVEL / MARGINAL / INVIAVEL
 # =====================================================================
+
+def _renderizar_badge_veredito(r: dict, ind: dict, projeto) -> None:
+    tma = projeto.parametros.tma_anual if projeto else 15.0
+    vpl = ind.get("vpl", 0) or 0
+    tir = ind.get("tir_anual")
+    lucro = r.get("lucro_liquido", 0) or 0
+    vgv = r.get("vgv_vendavel", 1) or 1
+    margem = lucro / vgv * 100 if vgv > 0 else 0
+    tir_pct = tir * 100 if tir else 0
+
+    if vpl > 0 and tir_pct >= tma + 4 and margem >= 15:
+        status = "VIÁVEL"
+        cor_bg, cor_borda, cor_texto = "rgba(61,139,94,0.10)", "#3D8B5E", "#2E5F47"
+        icone = "✅"
+        detalhe = f"VPL positivo · TIR {tir_pct:.1f}% (TMA+{tir_pct - tma:.1f} p.p.) · Margem {margem:.1f}%"
+    elif vpl > 0 and margem >= 5:
+        status = "MARGINAL"
+        cor_bg, cor_borda, cor_texto = "rgba(176,125,46,0.10)", "#B07D2E", "#7A5520"
+        icone = "⚠️"
+        detalhe = f"VPL positivo · Margem {margem:.1f}% — revise premissas ou reduza custos"
+    else:
+        status = "INVIÁVEL"
+        cor_bg, cor_borda, cor_texto = "rgba(192,84,84,0.10)", "#C05454", "#8B2E2E"
+        icone = "❌"
+        motivo = "VPL negativo" if vpl <= 0 else f"Margem {margem:.1f}% insuficiente"
+        detalhe = f"{motivo} — revise preços, custos ou prazo"
+
+    st.markdown(
+        f'<div style="background:{cor_bg};border-left:4px solid {cor_borda};'
+        f'padding:10px 16px;border-radius:0 6px 6px 0;margin:0 0 16px 0;'
+        f'display:flex;align-items:center;gap:12px;">'
+        f'<span style="font-size:17px;">{icone}</span>'
+        f'<span style="font-family:\'DM Serif Display\',serif;font-size:17px;'
+        f'font-weight:400;color:{cor_texto};letter-spacing:0.04em;">{status}</span>'
+        f'<span style="font-size:12px;color:{cor_texto};opacity:0.75;margin-left:4px;">'
+        f'— {detalhe}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+# =====================================================================
+# KPIs TOPO — HIERARQUIA: 3 HEADLINE + 4 SECUNDARIOS
+# =====================================================================
+
+_CSS_KPI_HEADLINE = """
+<style>
+.kpi-hl-grid{display:flex;gap:14px;margin-bottom:14px;}
+.kpi-hl{flex:1;background:#FFFFFF;border:0.5px solid #ECEAE4;border-radius:10px;
+         padding:20px 18px 16px;position:relative;overflow:hidden;}
+.kpi-hl::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0;}
+.kpi-hl.verde::before{background:#3D8B5E;}
+.kpi-hl.vermelho::before{background:#C05454;}
+.kpi-hl.atencao::before{background:#B07D2E;}
+.kpi-hl.neutro::before{background:#C4C1B8;}
+.kpi-hl-label{font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;
+               color:#8A8880;margin-bottom:10px;}
+.kpi-hl-valor{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;
+               color:#1A1916;line-height:1.1;margin-bottom:6px;}
+.kpi-hl.verde .kpi-hl-valor{color:#2E5F47;}
+.kpi-hl.vermelho .kpi-hl-valor{color:#8B2E2E;}
+.kpi-hl.atencao .kpi-hl-valor{color:#7A5520;}
+.kpi-hl-sub{font-size:12px;color:#5A5650;line-height:1.4;}
+</style>
+"""
+
 
 def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
     tma = projeto.parametros.tma_anual if projeto else 15.0
-
-    vgv_disponivel = r["vgv_vendavel"]
     lucro = r["lucro_liquido"]
+    vgv = r["vgv_vendavel"]
+    margem = (lucro / vgv * 100) if vgv > 0 else 0
     vpl = ind["vpl"]
     tir = ind.get("tir_anual")
     exp_max = abs(ind["exposicao_maxima"])
     mes_exp = ind["mes_exposicao_maxima"]
     pb = ind.get("payback_simples_meses")
-    margem = (lucro / vgv_disponivel * 100) if vgv_disponivel > 0 else 0
-    horizonte = r.get("horizonte_meses", 0)
     custo_total = r["total_saidas"]
-    pe = (custo_total / vgv_disponivel * 100) if vgv_disponivel > 0 else 0
+    horizonte = r.get("horizonte_meses", 0)
 
+    tir_pct = tir * 100 if tir else 0
     if tir is not None:
-        tir_pct = tir * 100
         if tir_pct >= tma:
-            tir_cor = "verde"
-            tir_sub = f"✅ Acima da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "verde", f"✅ Acima da TMA ({tma:.0f}% a.a.)"
         elif tir_pct >= tma * 0.85:
-            tir_cor = "neutro"
-            tir_sub = f"⚠️ Proxima da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "atencao", f"⚠️ Próxima da TMA ({tma:.0f}% a.a.)"
         else:
-            tir_cor = "vermelho"
-            tir_sub = f"❌ Abaixo da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "vermelho", f"❌ Abaixo da TMA ({tma:.0f}% a.a.)"
     else:
-        tir_cor = "neutro"
-        tir_sub = ""
+        tir_cor, tir_sub = "neutro", "TIR não convergiu"
 
     vpl_cor = "verde" if vpl > 0 else "vermelho"
-    vpl_sub = "✅ Projeto viavel" if vpl > 0 else "❌ Projeto inviavel"
-    pb_valor = f"Mes {pb}" if pb else "n/d"
+    vpl_sub = "✅ Projeto viável" if vpl > 0 else "❌ Projeto inviável"
+    marg_cor = "verde" if margem >= 15 else ("atencao" if margem > 0 else "vermelho")
+    marg_sub = f"Resultado / VGV Vendável · R$ {lucro / 1e6:.1f}M".replace(".", ",")
+
+    _TIP_TIR = (
+        "Taxa Interna de Retorno — taxa que zera o VPL do projeto, equivalente ao "
+        "rendimento anual do investimento. Compare com a TMA: TIR > TMA = projeto viável."
+    )
+    _TIP_VPL = (
+        "Valor Presente Líquido — soma de todas as entradas e saídas trazidas a valor "
+        "de hoje pela TMA. Positivo = projeto rende mais do que o custo de oportunidade."
+    )
+    _TIP_MARG = (
+        "Lucro líquido ÷ VGV vendável. Loteamentos de alto padrão buscam 20–30%. "
+        "Abaixo de 15% o projeto é considerado marginal; abaixo de 5% é inviável."
+    )
+
+    def _hl(label, valor, sub, cor, tip=""):
+        title_attr = f' title="{tip}"' if tip else ""
+        return (
+            f'<div class="kpi-hl {cor}"{title_attr}>'
+            f'<div class="kpi-hl-label">{label}</div>'
+            f'<div class="kpi-hl-valor">{valor}</div>'
+            f'<div class="kpi-hl-sub">{sub}</div>'
+            f'</div>'
+        )
+
+    cards_html = (
+        _hl("TIR Anual",          f"{tir_pct:.1f}%" if tir else "—", tir_sub, tir_cor, _TIP_TIR)
+        + _hl(f"VPL ({tma:.0f}% a.a.)", _fmt_m(vpl),              vpl_sub, vpl_cor, _TIP_VPL)
+        + _hl("Margem s/ VGV",   f"{margem:.1f}%",                 marg_sub, marg_cor, _TIP_MARG)
+    )
+    st.markdown(_CSS_KPI_HEADLINE, unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-hl-grid">{cards_html}</div>', unsafe_allow_html=True)
+
+    pb_val = f"M{pb}" if pb else "—"
     pb_sub = f"de {horizonte} meses no projeto" if (pb and horizonte > 0) else ""
-
-    kpis = [
-        {"label": "VGV Disponivel",       "valor": _fmt_m(vgv_disponivel), "cor": "neutro"},
-        {"label": "Resultado Bruto",      "valor": _fmt_m(lucro),          "cor": "verde" if lucro > 0 else "vermelho"},
-        {"label": "Margem Bruta",         "valor": f"{margem:.2f}%",       "cor": "verde" if margem > 0 else "vermelho"},
-        {"label": "TIR Anual",            "valor": f"{tir*100:.2f}%" if tir else "n/d", "sub": tir_sub, "cor": tir_cor},
-        {"label": f"VPL ({tma:.0f}% a.a.)", "valor": _fmt_m(vpl),         "sub": vpl_sub, "cor": vpl_cor},
-        {"label": "Pico de Exposicao",    "valor": _fmt_m(-exp_max),       "sub": f"Mes {mes_exp}", "cor": "vermelho"},
-        {"label": "Payback",              "valor": pb_valor,               "sub": pb_sub, "cor": "neutro"},
-        {"label": "Ponto de Equilibrio",  "valor": f"{pe:.2f}%",           "sub": "do VGV", "cor": "neutro"},
+    kpis_sec = [
+        {
+            "label": "VGV Vendável",
+            "valor": _fmt_m(vgv),
+            "cor": "neutro",
+            "help": "VGV Bruto menos lotes destinados à permuta física. Base de cálculo da margem e dos impostos.",
+        },
+        {
+            "label": "Custo Total",
+            "valor": _fmt_m(custo_total),
+            "cor": "neutro",
+            "help": "Soma de todas as saídas: terreno + obras (com BDI e contingência) + incorporação + comissão + impostos.",
+        },
+        {
+            "label": "Pico de Exposição",
+            "valor": _fmt_m(-exp_max),
+            "sub": f"no M{mes_exp}",
+            "cor": "vermelho",
+            "help": "Maior saldo acumulado negativo — capital próprio máximo que precisa estar disponível ao mesmo tempo. Quanto menor, menor o risco de falta de caixa.",
+        },
+        {
+            "label": "Payback",
+            "valor": pb_val,
+            "sub": pb_sub,
+            "cor": "neutro",
+            "help": "Mês em que o saldo acumulado cruza o zero — quando as receitas totais superam as saídas e o investimento começa a ser recuperado.",
+        },
     ]
-
-    renderizar_grade_kpis(kpis)
+    renderizar_grade_kpis(kpis_sec)
 
 
 # =====================================================================
@@ -428,10 +525,10 @@ def _renderizar_cards_margem(r: dict, ind: dict) -> None:
         return "verde" if v > 0 else "vermelho"
 
     kpis = [
-        {"label": "Margem s/ VGV Vendavel",       "valor": formatar_pct(margem_vv) if margem_vv is not None else "n/d",    "cor": cor_margem(margem_vv)},
-        {"label": "Margem s/ VGV Bruto",          "valor": formatar_pct(margem_vb) if margem_vb is not None else "n/d",    "cor": cor_margem(margem_vb)},
-        {"label": "Multiplicador (Lucro/Exp.)",   "valor": f"{multiplicador:.2f}x".replace(".", ",") if multiplicador else "n/d", "cor": "verde" if (multiplicador and multiplicador > 1) else "neutro"},
-        {"label": "TIR Anual",                    "valor": formatar_pct(tir) if tir is not None else "n/d",                "cor": "verde" if (tir and tir > 0.10) else "neutro"},
+        {"label": "Margem s/ VGV Vendavel",       "valor": formatar_pct(margem_vv) if margem_vv is not None else "—",    "cor": cor_margem(margem_vv)},
+        {"label": "Margem s/ VGV Bruto",          "valor": formatar_pct(margem_vb) if margem_vb is not None else "—",    "cor": cor_margem(margem_vb)},
+        {"label": "Multiplicador (Lucro/Exp.)",   "valor": f"{multiplicador:.2f}x".replace(".", ",") if multiplicador else "—", "cor": "verde" if (multiplicador and multiplicador > 1) else "neutro"},
+        {"label": "TIR Anual",                    "valor": formatar_pct(tir) if tir is not None else "—",                "cor": "verde" if (tir and tir > 0.10) else "neutro"},
     ]
     st.markdown("#### Indicadores de Rentabilidade")
     renderizar_grade_kpis(kpis)
@@ -630,7 +727,7 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
     _adicionar_fases(fig, mes_inicio_obras, mes_termino)
     partes = [f"VPL: {_fmt_m(vpl)}"]
     if tir:
-        partes.append(f"TIR: {formatar_pct(tir)} a.a.")
+        partes.append(f"TIR: {tir * 100:.1f}% a.a.")
     fig.add_annotation(
         x=0.99, y=0.04, xref="paper", yref="paper",
         text="  |  ".join(partes), showarrow=False,
@@ -641,7 +738,7 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
     fig.update_layout(**_layout(
         title="Curva de Caixa — Saldo Acumulado",
         xaxis=dict(title="Mes", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
-        yaxis=dict(title="R$", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
+        yaxis=dict(title="R$", tickformat=".3s", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
         height=430,
     ))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
@@ -709,8 +806,8 @@ def _grafico_composicao_mensal(df, mes_inicio_obras: int, mes_termino: int) -> N
         ),
     )
     fig.update_layout(**layout)
-    fig.update_yaxes(title_text="R$ (Entradas / Saidas)", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
-    fig.update_yaxes(title_text="Saldo Mensal (R$)", secondary_y=True, showgrid=False, tickfont=dict(color="#5A5650"), title_font=dict(color="#5A5650"))
+    fig.update_yaxes(title_text="R$", tickformat=".3s", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
+    fig.update_yaxes(title_text="Saldo Mensal", tickformat=".3s", secondary_y=True, showgrid=False, tickfont=dict(color="#5A5650"), title_font=dict(color="#5A5650"))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
         "Barras acima do zero: receitas. Barras abaixo do zero: saidas por categoria. "
@@ -756,7 +853,7 @@ def _grafico_curvas_acumuladas(df, mes_inicio_obras: int, mes_termino: int) -> N
     fig.update_layout(**_layout(
         title="Curvas S — Receitas e Saidas Acumuladas",
         xaxis=dict(title="Mes", gridcolor="#D8D4C8"),
-        yaxis=dict(title="R$ Acumulado", gridcolor="#D8D4C8"),
+        yaxis=dict(title="R$ Acumulado", tickformat=".3s", gridcolor="#D8D4C8"),
         height=400,
     ))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
@@ -811,7 +908,7 @@ def _grafico_obras_vs_comercializacao(df, projeto, horizonte: int, mes_termino: 
         xaxis=dict(title="Mes", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
         height=400,
     ))
-    fig.update_yaxes(title_text="Desembolso de Obras (R$)", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
+    fig.update_yaxes(title_text="Desembolso de Obras (R$)", tickformat=".3s", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
     fig.update_yaxes(
         title_text="% Comercializado", secondary_y=True, showgrid=False,
         tickformat=".0f", ticksuffix="%", range=[0, 110],
@@ -986,20 +1083,31 @@ def _dlg_fluxo_tela_cheia(df_agg, marcos_labels: dict[str, str] | None = None) -
     st.caption(f"Valores em R$ mil.   {len(df_t)} linhas · {len(df_t.columns)} periodos com movimentacao.")
 
 
+_LINHAS_COMPACTAS = frozenset({
+    "Receita Nominal Venda", "Total Entradas", "Total Saidas",
+    "Saldo do Mes", "Saldo Acumulado", "Saldo Descontado Acumulado",
+    "Marcos",
+})
+
+
 def _tabela_fluxo_mensal(df) -> None:
     st.markdown("---")
 
-    col_h, col_p, col_b = st.columns([3, 2, 1])
+    col_h, col_p, col_c, col_b = st.columns([2, 2, 1, 1])
     with col_h:
         st.markdown("#### Tabela de Fluxo de Caixa")
     with col_p:
         periodo = st.radio(
             "Periodicidade",
             ["Mensal", "Trimestral", "Anual"],
+            index=1,
             horizontal=True,
             key="tabela_fluxo_periodo_tipo",
             label_visibility="collapsed",
         )
+    with col_c:
+        compacto = st.toggle("Compacto", value=False, key="tabela_fluxo_compacto",
+                             help="Exibe apenas as linhas de totais e saldo, ocultando o detalhe por categoria.")
     with col_b:
         if st.button("⛶ Tela cheia", key="btn_tela_cheia_fluxo", use_container_width=True):
             _dlg_fluxo_tela_cheia(
@@ -1046,6 +1154,8 @@ def _tabela_fluxo_mensal(df) -> None:
         df_vis = df_agg
 
     df_t = _transpor_df_formatado(df_vis, marcos=_marcos_labels)
+    if compacto:
+        df_t = df_t[df_t.index.isin(_LINHAS_COMPACTAS)]
     altura = min(580, (len(df_t) + 1) * 36 + 38)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=altura)
     legenda_periodo = {"Mensal": "meses", "Trimestral": "trimestres", "Anual": "anos"}[periodo]
@@ -1100,14 +1210,14 @@ def _renderizar_preview_financiamento(df, resultado, projeto) -> None:
             {
                 "label": "Taxa Configurada",
                 "valor": f"{taxa:.2f}% a.m.",
-                "sub": f"{taxa_aa * 100:.1f}% a.a. — ajuste no Módulo 13",
+                "sub": f"{taxa_aa * 100:.1f}% a.a. — ajuste em Financiamento (sidebar)",
                 "cor": "neutro",
             },
         ]
         renderizar_grade_kpis(kpis_fin)
         st.caption(
-            "Estimativa informativa gerada com a taxa do Módulo 13 e sem limite de crédito. "
-            "Ative o financiamento no **Módulo 13** para incluir o custo no fluxo real."
+            "Estimativa informativa gerada com a taxa configurada em Financiamento e sem limite de crédito. "
+            "Ative o **Financiamento** (sidebar → Avançado) para incluir o custo no fluxo real."
         )
     except Exception:
         pass
@@ -1120,8 +1230,8 @@ def _renderizar_preview_financiamento(df, resultado, projeto) -> None:
 def renderizar() -> None:
     cabecalho_aba(
         8,
-        "Dashboard",
-        "Visao geral, indicadores e graficos interativos do projeto.",
+        "Resultado do Projeto",
+        "Indicadores, gráficos e análise de viabilidade.",
     )
 
     projeto = get_projeto()
@@ -1172,37 +1282,34 @@ def renderizar() -> None:
     except Exception:
         mes_inicio_obras = 0
 
-    # KPI grid completo (versao Visao Geral)
+    # Badge de veredito
+    _renderizar_badge_veredito(r, ind, projeto)
+
+    # KPIs hierárquicos: 3 headline + 4 secundários
     _kpis_topo(r, ind, projeto)
 
     # Preview de custo financeiro quando financiamento nao esta ativo
     if not r.get("financiamento_ativo"):
         _renderizar_preview_financiamento(df, resultado, projeto)
 
-    # Aviso de reajustes nao ativados
+    # Aviso de reajustes — colapsado por padrão, aparece uma vez acima dos tabs
     try:
         if not projeto.reajustes.ativo:
-            st.markdown(
-                '<div style="background:rgba(74,127,165,0.08);border-left:3px solid #4A7FA5;'
-                'padding:8px 12px;border-radius:0 4px 4px 0;font-size:12px;color:#2E5F80;'
-                'margin:16px 0 0 0;">'
-                '💡 <b>Reajustes monetários não ativados</b> — o custo de obras pode estar '
-                'subestimado sem a correção pelo INCC. Configure no '
-                '<b>Módulo 14 — Reajustes</b>.</div>',
-                unsafe_allow_html=True,
-            )
+            with st.expander("💡 Reajustes monetários não ativados", expanded=False):
+                st.markdown(
+                    "O custo de obras pode estar **subestimado** sem a correção pelo INCC ao longo do prazo de construção.  \n"
+                    "Configure em **Reajustes** (sidebar → Avançado → Reajustes) para simular o impacto da inflação setorial."
+                )
     except Exception:
         pass
 
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4 = st.tabs([
         "📈 Curva de Caixa",
-        "📊 Composicao Mensal",
-        "〜 Receitas vs Saidas",
+        "📊 Mensal e Receitas",
         "🏗 Obras e Vendas",
         "📋 DRE",
-        "🍩 Composicao de Saidas",
     ])
 
     with tab1:
@@ -1212,26 +1319,25 @@ def renderizar() -> None:
     with tab2:
         st.caption("Entradas e saídas mês a mês por categoria — identifique picos de desembolso e recebimento.")
         _grafico_composicao_mensal(df, mes_inicio_obras, mes_termino)
-
-    with tab3:
+        st.markdown("---")
         st.caption("Receitas e saídas acumuladas — o projeto fica positivo quando a linha verde ultrapassa a vermelha.")
         _grafico_curvas_acumuladas(df, mes_inicio_obras, mes_termino)
 
-    with tab4:
+    with tab3:
         st.caption("Desembolso de obras x velocidade de vendas — sincronize os picos para otimizar o caixa.")
         _grafico_obras_vs_comercializacao(df, projeto, resultado.horizonte, mes_termino)
 
-    with tab5:
+    with tab4:
         st.caption("DRE — Demonstrativo de Resultado em cascata: VGV → deduções → custos → resultado.")
         _renderizar_cascata_dre(r)
         st.markdown("---")
         _renderizar_cards_margem(r, ind)
         st.markdown("---")
         _renderizar_nominal_vs_financeiro(r)
-
-    with tab6:
-        st.caption("Participação de cada categoria de custo no total de saídas.")
-        _renderizar_composicao_saidas(r)
+        st.markdown("---")
+        with st.expander("🍩 Composição de Saídas por Categoria", expanded=False):
+            st.caption("Participação de cada categoria de custo no total de saídas.")
+            _renderizar_composicao_saidas(r)
 
     # Tabela de fluxo com seletor de periodicidade
     _tabela_fluxo_mensal(df)

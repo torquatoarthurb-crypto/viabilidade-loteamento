@@ -21,7 +21,10 @@ from ..helpers import (
     set_projeto,
 )
 
-def _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo) -> None:
+def _autosave(
+    projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo,
+    gatilho_tipo, gatilho_vendas_pct, gatilho_obras_pct,
+) -> None:
     try:
         nova = ConfigFinanciamento(
             ativo=ativo,
@@ -32,6 +35,9 @@ def _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minim
             comissao_abertura_pct=comissao,
             iof_pct=iof,
             caixa_minimo=caixa_minimo,
+            gatilho_tipo=gatilho_tipo,
+            gatilho_vendas_pct=gatilho_vendas_pct,
+            gatilho_obras_pct=gatilho_obras_pct,
         )
         if projeto.financiamento != nova:
             set_projeto(projeto.model_copy(update={"financiamento": nova}))
@@ -205,9 +211,14 @@ def renderizar() -> None:
             "bancária na viabilidade do projeto. "
             "A taxa configurada acima já aparece como estimativa no Dashboard."
         )
-        _autosave(projeto, False, taxa,
-                  fin.limite_credito_valor, fin.periodo_carencia_meses,
-                  fin.comissao_abertura_pct, fin.iof_pct, fin.caixa_minimo)
+        _autosave(
+            projeto, False, taxa,
+            fin.limite_credito_valor, fin.periodo_carencia_meses,
+            fin.comissao_abertura_pct, fin.iof_pct, fin.caixa_minimo,
+            getattr(fin, "gatilho_tipo", "nenhum"),
+            getattr(fin, "gatilho_vendas_pct", 20.0),
+            getattr(fin, "gatilho_obras_pct", 30.0),
+        )
         btn_proximo_modulo("Reajustes")
         return
 
@@ -291,8 +302,72 @@ def renderizar() -> None:
         else:
             st.caption("✓ Sem reserva — o sistema amortiza todo saldo excedente e só saca quando o caixa for negativo.")
 
+    # ============================================================
+    # CARD 3 — GATILHOS DE LIBERACAO DO FINANCIAMENTO
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("#### 🔓 Gatilho de liberação do financiamento")
+        st.caption(
+            "Define a condição para que o sistema comece a sacar da linha de crédito. "
+            "Útil para refletir exigências do banco (ex.: só libera após X% de obras executadas)."
+        )
+
+        _gatilho_opts = {
+            "nenhum":  "Sem gatilho — saca a qualquer momento",
+            "vendas":  "% de vendas — saca somente após X% do VGV vendável ser contratado",
+            "obras":   "% de obras — saca somente após X% do custo de obras ser desembolsado",
+            "ambos":   "Ambos — as duas condições devem ser atingidas simultaneamente",
+        }
+        gatilho_tipo = st.selectbox(
+            "Tipo de gatilho",
+            options=list(_gatilho_opts.keys()),
+            format_func=lambda x: _gatilho_opts[x],
+            index=list(_gatilho_opts.keys()).index(
+                getattr(fin, "gatilho_tipo", "nenhum")
+            ),
+            key="fin_gatilho_tipo",
+        )
+
+        gatilho_vendas_pct = getattr(fin, "gatilho_vendas_pct", 20.0)
+        gatilho_obras_pct = getattr(fin, "gatilho_obras_pct", 30.0)
+
+        if gatilho_tipo in ("vendas", "ambos"):
+            gatilho_vendas_pct = numero_brl(
+                "% do VGV vendável contratado para liberar",
+                value=float(getattr(fin, "gatilho_vendas_pct", 20.0)),
+                key="fin_gatilho_vendas",
+                min_value=0.0,
+                max_value=100.0,
+                help="Ex.: 20 → o sistema só começa a sacar após 20% das unidades/VGV serem vendidos.",
+            )
+
+        if gatilho_tipo in ("obras", "ambos"):
+            gatilho_obras_pct = numero_brl(
+                "% do custo de obras desembolsado para liberar",
+                value=float(getattr(fin, "gatilho_obras_pct", 30.0)),
+                key="fin_gatilho_obras",
+                min_value=0.0,
+                max_value=100.0,
+                help="Ex.: 30 → o sistema só saca da linha após 30% do orçamento de obras ter sido gasto.",
+            )
+
+        if gatilho_tipo == "nenhum":
+            st.caption("✓ Linha liberada desde M0 — o sistema saca sempre que o caixa cair abaixo do mínimo.")
+        elif gatilho_tipo == "ambos":
+            st.info(
+                f"📌 A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido "
+                f"**e** **{gatilho_obras_pct:.0f}% das obras** sejam executadas ao mesmo tempo."
+            )
+        elif gatilho_tipo == "vendas":
+            st.info(f"📌 A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido.")
+        elif gatilho_tipo == "obras":
+            st.info(f"📌 A linha ficará bloqueada até que **{gatilho_obras_pct:.0f}% das obras** sejam executadas.")
+
     # Auto-save
-    _autosave(projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo)
+    _autosave(
+        projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo,
+        gatilho_tipo, gatilho_vendas_pct, gatilho_obras_pct,
+    )
 
     # Navegacao
     btn_proximo_modulo("Reajustes")
@@ -301,7 +376,7 @@ def renderizar() -> None:
     # RESULTADOS (apos calcular)
     # ============================================================
     if resultado is None:
-        st.info("Clique em **Calcular fluxo de caixa** na sidebar para ver o impacto do financiamento.")
+        st.info("Clique em **Calcular viabilidade** na sidebar para ver o impacto do financiamento.")
         return
 
     st.markdown("---")

@@ -29,12 +29,12 @@ CSS_TEMA = """
     --stone-100: #ECEAE4;
     --stone-50:  #F5F3EE;
 
-    /* Azul naval (marca + atencao) */
-    --navy-700: #1E2F6E;
-    --navy-500: #1E3A8A;
-    --navy-300: #4A6FBF;
-    --navy-100: #DBEAFE;
-    --navy-50:  #EFF6FF;
+    /* Ocre Altiplano (marca + atencao) */
+    --accent-700: #8A5A1A;
+    --accent-500: #B07D2E;
+    --accent-300: #D4A85A;
+    --accent-100: #EDD89A;
+    --accent-50:  #FAF3E8;
 
     /* Semantica financeira */
     --green:     #2D7A4F;
@@ -53,8 +53,8 @@ CSS_TEMA = """
     --text-primary: var(--stone-900);
     --text-secondary: var(--stone-500);
     --text-muted:   var(--stone-300);
-    --accent:       var(--navy-500);
-    --accent-dark:  var(--navy-700);
+    --accent:      var(--accent-500);
+    --accent-dark: var(--accent-700);
 }
 
 /* =====================================================================
@@ -140,38 +140,38 @@ section[data-testid="stSidebar"] .stButton > button:hover:not(:disabled) {
 
 /* Item ativo — caixa ocre */
 section[data-testid="stSidebar"] .stButton > button:disabled {
-    background: rgba(30,58,138,0.14) !important;
-    border: 0.5px solid rgba(30,58,138,0.35) !important;
-    color: #93C5FD !important;
+    background: rgba(176,125,46,0.15) !important;
+    border: 0.5px solid rgba(176,125,46,0.45) !important;
+    color: #D4A85A !important;
     font-weight: 600 !important;
     opacity: 1 !important;
     cursor: default !important;
 }
 
-/* Botoes primarios da sidebar — branco com texto escuro (igual ao Baixar JSON) */
+/* Botoes primarios da sidebar — ocre (Calcular Viabilidade) */
 section[data-testid="stSidebar"] .stButton > button[kind="primary"],
 section[data-testid="stSidebar"] .stButton > button[data-testid="baseButton-primary"] {
-    background: #FFFFFF !important;
-    background-color: #FFFFFF !important;
-    border: 0.5px solid #D1D5DB !important;
+    background: #D4A85A !important;
+    background-color: #D4A85A !important;
+    border: 0.5px solid #B07D2E !important;
     border-radius: 6px !important;
     color: #1A1916 !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
     font-size: 13px !important;
     width: calc(100% - 20px) !important;
     margin: 4px 10px 6px !important;
     padding: 9px 12px !important;
     justify-content: center !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12) !important;
+    box-shadow: 0 1px 6px rgba(176,125,46,0.35) !important;
 }
 
 section[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover,
 section[data-testid="stSidebar"] .stButton > button[data-testid="baseButton-primary"]:hover {
-    background: #F3F4F6 !important;
-    background-color: #F3F4F6 !important;
-    border-color: #9CA3AF !important;
-    color: #111111 !important;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.16) !important;
+    background: #B07D2E !important;
+    background-color: #B07D2E !important;
+    border-color: #8A5A1A !important;
+    color: #1A1916 !important;
+    box-shadow: 0 2px 10px rgba(176,125,46,0.40) !important;
 }
 
 /* Textos na sidebar (markdown, labels) */
@@ -368,10 +368,10 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
     border-width: 0.5px;
 }
 
-/* Ocre — atencao, warning (= cor da marca!) */
+/* Ocre — atencao, warning (= cor da marca Altiplano) */
 .kpi-card.atencao {
-    background: var(--navy-50);
-    border-color: var(--navy-500);
+    background: var(--accent-50);
+    border-color: var(--accent-500);
     border-width: 0.5px;
 }
 
@@ -399,7 +399,7 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 }
 
 .kpi-card.verde  .kpi-label { color: var(--green); }
-.kpi-card.atencao .kpi-label { color: var(--navy-700); }
+.kpi-card.atencao .kpi-label { color: var(--accent-600, var(--accent-700)); }
 .kpi-card.vermelho .kpi-label { color: var(--red); }
 .kpi-card.neutro-azul .kpi-label { color: var(--blue); }
 
@@ -411,7 +411,7 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 }
 
 .kpi-card.verde     .kpi-valor { color: #1A5C38; }
-.kpi-card.atencao   .kpi-valor { color: var(--navy-700); }
+.kpi-card.atencao   .kpi-valor { color: var(--accent-700); }  /* ocre escuro */
 .kpi-card.vermelho  .kpi-valor { color: #8A2A1A; }
 .kpi-card.neutro-azul .kpi-valor { color: #1A4A80; }
 
@@ -437,7 +437,7 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 }
 
 .saude-item .check-ok  { color: var(--green); font-size: 15px; }
-.saude-item .check-warn { color: var(--navy-500); font-size: 15px; }
+.saude-item .check-warn { color: var(--accent-500); font-size: 15px; }  /* ocre */
 .saude-item .check-err { color: var(--red); font-size: 15px; }
 
 /* =====================================================================
@@ -465,17 +465,17 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 
 /* Botao primario — ocre */
 .stButton > button[kind="primary"] {
-    background-color: var(--navy-500) !important;
-    border-color: var(--navy-500) !important;
+    background-color: var(--accent-500) !important;
+    border-color: var(--accent-500) !important;
     color: #FFFFFF !important;
     font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(30,58,138,0.25) !important;
+    box-shadow: 0 2px 8px rgba(176,125,46,0.30) !important;
 }
 
 .stButton > button[kind="primary"]:hover {
-    background-color: var(--navy-700) !important;
-    border-color: var(--navy-700) !important;
-    box-shadow: 0 4px 14px rgba(30,58,138,0.30) !important;
+    background-color: var(--accent-700) !important;
+    border-color: var(--accent-700) !important;
+    box-shadow: 0 4px 14px rgba(176,125,46,0.35) !important;
 }
 
 /* =====================================================================
@@ -495,8 +495,8 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 
 .stTextInput > div > div > input:focus,
 .stNumberInput > div > div > input:focus {
-    border-color: var(--navy-500) !important;
-    box-shadow: 0 0 0 2px rgba(30,58,138,0.15) !important;
+    border-color: var(--accent-500) !important;
+    box-shadow: 0 0 0 2px rgba(176,125,46,0.18) !important;
 }
 
 .stSelectbox > div > div {
@@ -540,9 +540,9 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 }
 
 .stTabs [aria-selected="true"] {
-    color: var(--navy-700) !important;
-    font-weight: 600 !important;
-    border-bottom: 2px solid var(--navy-500) !important;
+    color: var(--accent-700) !important;
+    font-weight: 700 !important;
+    border-bottom: 2px solid var(--accent-500) !important;
 }
 
 /* =====================================================================
@@ -608,10 +608,10 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 }
 
 .stWarning {
-    background: var(--navy-50) !important;
-    border: 0.5px solid var(--navy-500) !important;
+    background: var(--accent-50) !important;
+    border: 0.5px solid var(--accent-300) !important;
     border-radius: 8px !important;
-    color: var(--navy-700) !important;
+    color: var(--accent-700) !important;
 }
 
 .stError {
@@ -761,7 +761,7 @@ PLOTLY_TEXT     = "#8A8880"
 PLOTLY_FONT_COLOR = "#4A4944"
 
 PLOTLY_VERDE   = "#2D7A4F"
-PLOTLY_OCRE    = "#2B50A8"
+PLOTLY_OCRE    = "#B07D2E"
 PLOTLY_VERMELHO = "#B83C2A"
 PLOTLY_AZUL    = "#3A6EA8"
 PLOTLY_CINZA   = "#C4C1B8"

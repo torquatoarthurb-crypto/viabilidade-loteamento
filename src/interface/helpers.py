@@ -123,7 +123,7 @@ def numero_brl(
 def formatar_brl(valor: float | int | None) -> str:
     """Formata um valor como R$ no padrao brasileiro (1.234,56)."""
     if valor is None:
-        return "n/d"
+        return "—"
     if valor < 0:
         return f"-R$ {abs(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -132,7 +132,7 @@ def formatar_brl(valor: float | int | None) -> str:
 def formatar_pct(valor: float | None, casas: int = 2) -> str:
     """Formata um decimal como percentual (0.1234 -> 12,34 %)."""
     if valor is None:
-        return "n/d"
+        return "—"
     txt = f"{valor * 100:.{casas}f}".replace(".", ",")
     return f"{txt} %"
 
@@ -140,14 +140,14 @@ def formatar_pct(valor: float | None, casas: int = 2) -> str:
 def formatar_int(valor: int | float | None) -> str:
     """Formata um inteiro com separador de milhar."""
     if valor is None:
-        return "n/d"
+        return "—"
     return f"{int(valor):,}".replace(",", ".")
 
 
 def formatar_num(valor: float | None, casas: int = 2) -> str:
     """Formata um numero com separador brasileiro."""
     if valor is None:
-        return "n/d"
+        return "—"
     txt = f"{valor:,.{casas}f}"
     return txt.replace(",", "X").replace(".", ",").replace("X", ".")
 

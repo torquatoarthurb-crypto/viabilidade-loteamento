@@ -547,10 +547,10 @@ def renderizar() -> None:
             )
         with col3:
             termino_obras_auto = st.checkbox(
-                "Calcular termino pelas obras (Aba 3)",
+                "Calcular término pelas obras",
                 value=True,
                 key="aba1_termino_auto",
-                help="Usa: inicio_obras + duracao maxima das etapas da Aba 3. "
+                help="Usa: início das obras + duração máxima das etapas cadastradas em Custos de Obra. "
                      "Desmarque para definir manualmente.",
             )
 
@@ -563,7 +563,7 @@ def renderizar() -> None:
                 )
                 termino_obras = termino_obras_calculado
             elif termino_obras_auto and duracao_calculada_meses is None:
-                st.warning("Nao ha obras cadastradas na Aba 3. Usando o valor manual.")
+                st.warning("Nenhuma etapa de obra cadastrada em Custos de Obra. Usando o valor manual.")
                 termino_obras = _mes_ano(
                     "Termino de obras (manual)",
                     terreno.datas.termino_obras,
