@@ -37,20 +37,19 @@ from ..tabela_mensal import (
 CHAVE_ETAPAS = "aba3_lista_etapas"
 
 # Etapas individuais como opcoes para o botao "+ Adicionar etapa".
-# m_ini_offset e relativo ao inicio das obras (M0 = marco "Ini.Obras").
-_ETAPAS_INDIVIDUAIS: dict[str, dict | None] = {
-    "Personalizado":              None,
-    "Servicos Preliminares":      {"dur":  2, "curva": "linear",  "m_ini_offset":  0},
-    "Terraplenagem":              {"dur":  6, "curva": "s_curve", "m_ini_offset":  1},
-    "Drenagem Pluvial":           {"dur":  8, "curva": "s_curve", "m_ini_offset":  3},
-    "Redes de Agua":              {"dur":  8, "curva": "s_curve", "m_ini_offset":  4},
-    "Redes de Esgoto":            {"dur":  9, "curva": "s_curve", "m_ini_offset":  4},
-    "Pavimentacao":               {"dur": 10, "curva": "s_curve", "m_ini_offset":  8},
-    "Rede Eletrica e Iluminacao": {"dur":  6, "curva": "linear",  "m_ini_offset": 13},
-    "Paisagismo e Areas Verdes":  {"dur":  4, "curva": "linear",  "m_ini_offset": 18},
-    "Cerca e Portaria":           {"dur":  2, "curva": "linear",  "m_ini_offset": 14},
-    "Sinalizacao e Demarcacao":   {"dur":  3, "curva": "linear",  "m_ini_offset": 15},
-}
+_ETAPAS_INDIVIDUAIS: list[str] = [
+    "Personalizado",
+    "Servicos Preliminares",
+    "Terraplenagem",
+    "Drenagem Pluvial",
+    "Redes de Agua",
+    "Redes de Esgoto",
+    "Pavimentacao",
+    "Rede Eletrica e Iluminacao",
+    "Paisagismo e Areas Verdes",
+    "Cerca e Portaria",
+    "Sinalizacao e Demarcacao",
+]
 
 _TEMPLATES_OBRA: dict[str, list[dict]] = {
     "Loteamento 18 meses — Infraestrutura basica": [
@@ -420,41 +419,19 @@ def renderizar() -> None:
                     st.rerun()
 
         st.markdown("---")
-        _m_ini_obras = next(
-            (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
-        )
         col_add, col_sel = st.columns([1, 3])
         with col_sel:
             etapa_add_sel = st.selectbox(
                 "Tipo de etapa",
-                list(_ETAPAS_INDIVIDUAIS.keys()),
+                _ETAPAS_INDIVIDUAIS,
                 key="aba3_add_sel",
-                help="Escolha uma etapa predefinida (com distribuicao temporal automatica) "
-                     "ou 'Personalizado' para comecar em branco.",
+                help="Escolha uma etapa predefinida ou 'Personalizado' para comecar em branco.",
             )
         with col_add:
             st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
             if st.button("+ Adicionar", key="aba3_add_btn", type="primary", width="stretch"):
-                preset = _ETAPAS_INDIVIDUAIS[etapa_add_sel]
-                if preset is None:
-                    nova_etapa = {
-                        "nome": "Nova etapa",
-                        "valor_total": 0.0,
-                        "distribuicao": {},
-                    }
-                else:
-                    m_abs = _m_ini_obras + preset["m_ini_offset"]
-                    dist = (
-                        _gerar_distribuicao_curva_s(m_abs, preset["dur"])
-                        if preset["curva"] == "s_curve"
-                        else gerar_distribuicao_linear(m_abs, m_abs + preset["dur"] - 1)
-                    )
-                    nova_etapa = {
-                        "nome": etapa_add_sel,
-                        "valor_total": 0.0,
-                        "distribuicao": dist,
-                    }
-                etapas_estado.append(nova_etapa)
+                nome = "Nova etapa" if etapa_add_sel == "Personalizado" else etapa_add_sel
+                etapas_estado.append({"nome": nome, "valor_total": 0.0, "distribuicao": {}})
                 st.rerun()
 
         if not etapas_estado:

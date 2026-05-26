@@ -109,16 +109,7 @@ def projeto_novo() -> Projeto:
         ),
         obras=Aba3Obras(
             modo="detalhado",
-            etapas=[
-                EtapaObra(nome="Terraplenagem",              valor_total=0, mes_inicio=10, duracao_meses=6,  curva="linear"),
-                EtapaObra(nome="Drenagem Pluvial",           valor_total=0, mes_inicio=12, duracao_meses=8,  curva="linear"),
-                EtapaObra(nome="Rede de Agua",               valor_total=0, mes_inicio=14, duracao_meses=6,  curva="linear"),
-                EtapaObra(nome="Rede de Esgoto",             valor_total=0, mes_inicio=14, duracao_meses=6,  curva="linear"),
-                EtapaObra(nome="Rede Eletrica e Iluminacao", valor_total=0, mes_inicio=18, duracao_meses=6,  curva="linear"),
-                EtapaObra(nome="Pavimentacao",               valor_total=0, mes_inicio=20, duracao_meses=8,  curva="s_curve"),
-                EtapaObra(nome="Calcadas e Guias",           valor_total=0, mes_inicio=24, duracao_meses=4,  curva="linear"),
-                EtapaObra(nome="Paisagismo",                 valor_total=0, mes_inicio=26, duracao_meses=2,  curva="linear"),
-            ],
+            etapas=[],
             bdi_percentual=18,
             contingencia_percentual=5,
         ),
