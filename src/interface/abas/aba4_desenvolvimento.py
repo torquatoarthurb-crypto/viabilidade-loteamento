@@ -45,6 +45,32 @@ from ..tabela_mensal import (
 CHAVE_DESPESAS = "aba4_lista_despesas"
 CHAVE_FILTRO_MESES = "aba4_filtro_meses"
 
+# Opcoes para o seletor "+ Adicionar despesa"
+_OPCOES_DESPESA = [
+    "Personalizado",
+    "Levantamento Topografico e Sondagem",
+    "Projeto Urbanistico Completo",
+    "Projetos Complementares (Drenagem, Pavimentacao, Eletrico, Agua/Esgoto)",
+    "Licenciamento Ambiental (LP / LI / LO)",
+    "Aprovacao do Parcelamento na Prefeitura",
+    "Registro do Loteamento em Cartorio",
+    "Medida Compensatoria Urbana e Ambiental",
+    "Marketing e Vendas (Stand, Material, Publicidade)",
+    "Assessoria Juridica",
+]
+
+_CATEGORIA_DESPESA = {
+    "Levantamento Topografico e Sondagem": "projetos",
+    "Projeto Urbanistico Completo": "projetos",
+    "Projetos Complementares (Drenagem, Pavimentacao, Eletrico, Agua/Esgoto)": "projetos",
+    "Licenciamento Ambiental (LP / LI / LO)": "licenciamento",
+    "Aprovacao do Parcelamento na Prefeitura": "licenciamento",
+    "Registro do Loteamento em Cartorio": "licenciamento",
+    "Medida Compensatoria Urbana e Ambiental": "licenciamento",
+    "Marketing e Vendas (Stand, Material, Publicidade)": "marketing",
+    "Assessoria Juridica": "outros",
+}
+
 
 def _carregar_despesas_do_projeto() -> list[dict]:
     projeto = get_projeto()
@@ -182,14 +208,27 @@ def _despesas_padrao_loteamento(projeto) -> list[dict]:
     ]
 
 
+def _criar_despesa_preset(nome: str, projeto) -> dict:
+    """Retorna um dict de despesa preenchido com a distribuicao correta para o nome dado."""
+    templates = {d["nome"]: d for d in _despesas_padrao_loteamento(projeto)}
+    if nome in templates:
+        base = templates[nome].copy()
+        base.setdefault("modo_valor", "fixo")
+        base.setdefault("percentual_vgv", 0.0)
+        return base
+    return {
+        "nome": nome,
+        "categoria": _CATEGORIA_DESPESA.get(nome, "outros"),
+        "valor_total": 0.0,
+        "modo_valor": "fixo",
+        "percentual_vgv": 0.0,
+        "distribuicao": {},
+    }
+
+
 def _garantir_estado_despesas() -> None:
     if CHAVE_DESPESAS not in st.session_state:
-        despesas_projeto = _carregar_despesas_do_projeto()
-        if despesas_projeto:
-            st.session_state[CHAVE_DESPESAS] = despesas_projeto
-        else:
-            # Projeto sem despesas: pre-popular com itens tipicos + curvas vinculadas aos marcos
-            st.session_state[CHAVE_DESPESAS] = _despesas_padrao_loteamento(get_projeto())
+        st.session_state[CHAVE_DESPESAS] = _carregar_despesas_do_projeto()
     if CHAVE_FILTRO_MESES not in st.session_state:
         st.session_state[CHAVE_FILTRO_MESES] = True  # default ON
 
@@ -309,29 +348,43 @@ def renderizar() -> None:
     )
 
     # Botoes de acao globais
-    col_add, col_filtro, _ = st.columns([2, 2, 3])
+    col_add, col_sel = st.columns([1, 3])
+    with col_sel:
+        desp_add_sel = st.selectbox(
+            "Tipo de despesa",
+            _OPCOES_DESPESA,
+            key="aba4_add_sel",
+            help="Escolha uma despesa predefinida (com distribuicao temporal automatica "
+                 "baseada nos marcos do projeto) ou 'Personalizado' para comecar em branco.",
+        )
     with col_add:
-        if st.button("Adicionar item", width="stretch", icon=":material/add:"):
-            despesas_estado.append({
-                "nome": "Nova despesa",
-                "categoria": "outros",
-                "valor_total": 0.0,
-                "distribuicao": {},
-            })
+        st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+        if st.button("+ Adicionar", key="aba4_add_btn", type="primary", width="stretch"):
+            if desp_add_sel == "Personalizado":
+                nova = {
+                    "nome": "Nova despesa",
+                    "categoria": "outros",
+                    "valor_total": 0.0,
+                    "modo_valor": "fixo",
+                    "percentual_vgv": 0.0,
+                    "distribuicao": {},
+                }
+            else:
+                nova = _criar_despesa_preset(desp_add_sel, projeto)
+            despesas_estado.append(nova)
             _autosave_aba4()
             st.rerun()
 
-    with col_filtro:
-        st.session_state[CHAVE_FILTRO_MESES] = st.checkbox(
-            "Mostrar só meses preenchidos",
-            value=st.session_state[CHAVE_FILTRO_MESES],
-            help="Quando marcado, esconde meses zerados na tabela mensal "
-                 "(mostra apenas os meses com % > 0 mais 3 meses de margem). "
-                 "Util em projetos longos.",
-        )
+    st.session_state[CHAVE_FILTRO_MESES] = st.checkbox(
+        "Mostrar só meses preenchidos",
+        value=st.session_state[CHAVE_FILTRO_MESES],
+        help="Quando marcado, esconde meses zerados na tabela mensal "
+             "(mostra apenas os meses com % > 0 mais 3 meses de margem). "
+             "Util em projetos longos.",
+    )
 
     if not despesas_estado:
-        st.info("Nenhuma despesa cadastrada. Clique em '+ Adicionar despesa' para comecar.")
+        st.info("Nenhuma despesa cadastrada. Selecione o tipo acima e clique em '+ Adicionar'.")
 
     indices_para_remover = []
 

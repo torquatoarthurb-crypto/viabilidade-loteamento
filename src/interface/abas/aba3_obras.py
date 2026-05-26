@@ -36,9 +36,22 @@ from ..tabela_mensal import (
 
 CHAVE_ETAPAS = "aba3_lista_etapas"
 
-# Templates de etapas pre-configurados.
-# Todos os m_ini sao relativos ao inicio das obras (M0 = Ini. Obras).
-# pct = participacao indicativa no custo total (so para orientacao — usuario ajusta os valores).
+# Etapas individuais como opcoes para o botao "+ Adicionar etapa".
+# m_ini_offset e relativo ao inicio das obras (M0 = marco "Ini.Obras").
+_ETAPAS_INDIVIDUAIS: dict[str, dict | None] = {
+    "Personalizado":              None,
+    "Servicos Preliminares":      {"dur":  2, "curva": "linear",  "m_ini_offset":  0},
+    "Terraplenagem":              {"dur":  6, "curva": "s_curve", "m_ini_offset":  1},
+    "Drenagem Pluvial":           {"dur":  8, "curva": "s_curve", "m_ini_offset":  3},
+    "Redes de Agua":              {"dur":  8, "curva": "s_curve", "m_ini_offset":  4},
+    "Redes de Esgoto":            {"dur":  9, "curva": "s_curve", "m_ini_offset":  4},
+    "Pavimentacao":               {"dur": 10, "curva": "s_curve", "m_ini_offset":  8},
+    "Rede Eletrica e Iluminacao": {"dur":  6, "curva": "linear",  "m_ini_offset": 13},
+    "Paisagismo e Areas Verdes":  {"dur":  4, "curva": "linear",  "m_ini_offset": 18},
+    "Cerca e Portaria":           {"dur":  2, "curva": "linear",  "m_ini_offset": 14},
+    "Sinalizacao e Demarcacao":   {"dur":  3, "curva": "linear",  "m_ini_offset": 15},
+}
+
 _TEMPLATES_OBRA: dict[str, list[dict]] = {
     "Loteamento 18 meses — Infraestrutura basica": [
         {"nome": "Servicos Preliminares",      "pct":  3, "m_ini":  0, "dur":  2, "curva": "linear"},
@@ -322,8 +335,8 @@ def renderizar() -> None:
         _garantir_estado_etapas()
         etapas_estado = st.session_state[CHAVE_ETAPAS]
 
-        # ---- Templates pre-configurados ----
-        with st.expander("Carregar template de etapas", expanded=not etapas_estado):
+        # ---- Templates pre-configurados (secundario — fechado por padrao) ----
+        with st.expander("Carregar conjunto completo de etapas (template)", expanded=False):
             m_ini_obras = next(
                 (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
             )
@@ -407,21 +420,41 @@ def renderizar() -> None:
                     st.rerun()
 
         st.markdown("---")
-        col_add, _ = st.columns([1, 3])
+        _m_ini_obras = next(
+            (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
+        )
+        col_add, col_sel = st.columns([1, 3])
+        with col_sel:
+            etapa_add_sel = st.selectbox(
+                "Tipo de etapa",
+                list(_ETAPAS_INDIVIDUAIS.keys()),
+                key="aba3_add_sel",
+                help="Escolha uma etapa predefinida (com distribuicao temporal automatica) "
+                     "ou 'Personalizado' para comecar em branco.",
+            )
         with col_add:
-            if st.button("Adicionar etapa", width="stretch", icon=":material/add:"):
-                _marcos_proj = marcos_projeto(projeto)
-                _m_ini = next(
-                    (k for k, v in _marcos_proj.items() if v == "Ini.Obras"), 0
-                )
-                _m_fim = next(
-                    (k for k, v in _marcos_proj.items() if v == "Fim Obras"), _m_ini + 11
-                )
-                etapas_estado.append({
-                    "nome": f"Etapa {len(etapas_estado)+1}",
-                    "valor_total": 0.0,
-                    "distribuicao": gerar_distribuicao_linear(_m_ini, _m_fim),
-                })
+            st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+            if st.button("+ Adicionar", key="aba3_add_btn", type="primary", width="stretch"):
+                preset = _ETAPAS_INDIVIDUAIS[etapa_add_sel]
+                if preset is None:
+                    nova_etapa = {
+                        "nome": "Nova etapa",
+                        "valor_total": 0.0,
+                        "distribuicao": {},
+                    }
+                else:
+                    m_abs = _m_ini_obras + preset["m_ini_offset"]
+                    dist = (
+                        _gerar_distribuicao_curva_s(m_abs, preset["dur"])
+                        if preset["curva"] == "s_curve"
+                        else gerar_distribuicao_linear(m_abs, m_abs + preset["dur"] - 1)
+                    )
+                    nova_etapa = {
+                        "nome": etapa_add_sel,
+                        "valor_total": 0.0,
+                        "distribuicao": dist,
+                    }
+                etapas_estado.append(nova_etapa)
                 st.rerun()
 
         if not etapas_estado:
