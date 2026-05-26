@@ -710,10 +710,34 @@ def renderizar() -> None:
                 nova_aba = None
 
         if nova_aba is not None:
-            json_atual = projeto.obras.model_dump_json()
-            json_novo = nova_aba.model_dump_json()
-            if json_atual != json_novo:
-                projeto_atualizado = projeto.model_copy(update={"obras": nova_aba})
+            from ...engine.utilidades import meses_entre
+            projeto_atualizado = projeto
+            if projeto.obras.model_dump_json() != nova_aba.model_dump_json():
+                projeto_atualizado = projeto_atualizado.model_copy(update={"obras": nova_aba})
+
+            # Atualizar termino_obras se o fluxo ultrapassar a duracao configurada
+            m_max: int | None = None
+            if nova_aba.modo == "resumido" and nova_aba.resumido:
+                m_max = nova_aba.resumido.mes_inicio + nova_aba.resumido.duracao_meses
+            elif nova_aba.modo == "detalhado" and nova_aba.etapas:
+                m_max = max(e.mes_inicio + e.duracao_meses for e in nova_aba.etapas)
+
+            if m_max is not None:
+                datas = projeto.terreno.datas
+                m_ini_obras = meses_entre(datas.inicio_projeto, datas.inicio_obras)
+                m_fim_atual = meses_entre(datas.inicio_projeto, datas.termino_obras)
+                if m_max > m_fim_atual:
+                    nova_duracao = m_max - m_ini_obras
+                    _ano = datas.inicio_obras.year + (datas.inicio_obras.month - 1 + nova_duracao) // 12
+                    _mes = (datas.inicio_obras.month - 1 + nova_duracao) % 12 + 1
+                    from datetime import date as _date
+                    novo_termino = _date(_ano, _mes, 1)
+                    novas_datas = datas.model_copy(update={"termino_obras": novo_termino})
+                    novo_terreno = projeto.terreno.model_copy(update={"datas": novas_datas})
+                    projeto_atualizado = projeto_atualizado.model_copy(update={"terreno": novo_terreno})
+                    st.session_state["_aba1_duracao_obras_override"] = nova_duracao
+
+            if projeto_atualizado is not projeto:
                 set_projeto(projeto_atualizado)
                 invalidar_resultado()
     except Exception:
@@ -795,9 +819,37 @@ def sincronizar_aba3() -> None:
 
         if nova_aba is not None:
             from ..helpers import get_projeto, set_projeto, invalidar_resultado
+            from ...engine.utilidades import meses_entre
             projeto = get_projeto()
+            projeto_atualizado = projeto
+
             if projeto.obras.model_dump_json() != nova_aba.model_dump_json():
-                set_projeto(projeto.model_copy(update={"obras": nova_aba}))
+                projeto_atualizado = projeto_atualizado.model_copy(update={"obras": nova_aba})
+
+            # Verificar se o fluxo das etapas ultrapassa o termino_obras configurado
+            m_max: int | None = None
+            if nova_aba.modo == "resumido" and nova_aba.resumido:
+                m_max = nova_aba.resumido.mes_inicio + nova_aba.resumido.duracao_meses
+            elif nova_aba.modo == "detalhado" and nova_aba.etapas:
+                m_max = max(e.mes_inicio + e.duracao_meses for e in nova_aba.etapas)
+
+            if m_max is not None:
+                datas = projeto.terreno.datas
+                m_ini_obras = meses_entre(datas.inicio_projeto, datas.inicio_obras)
+                m_fim_atual = meses_entre(datas.inicio_projeto, datas.termino_obras)
+                if m_max > m_fim_atual:
+                    nova_duracao = m_max - m_ini_obras
+                    _ano = datas.inicio_obras.year + (datas.inicio_obras.month - 1 + nova_duracao) // 12
+                    _mes = (datas.inicio_obras.month - 1 + nova_duracao) % 12 + 1
+                    from datetime import date as _date
+                    novo_termino = _date(_ano, _mes, 1)
+                    novas_datas = datas.model_copy(update={"termino_obras": novo_termino})
+                    novo_terreno = projeto.terreno.model_copy(update={"datas": novas_datas})
+                    projeto_atualizado = projeto_atualizado.model_copy(update={"terreno": novo_terreno})
+                    st.session_state["_aba1_duracao_obras_override"] = nova_duracao
+
+            if projeto_atualizado is not projeto:
+                set_projeto(projeto_atualizado)
                 invalidar_resultado()
     except Exception:
         pass

@@ -558,34 +558,33 @@ def renderizar() -> None:
                 "aba1_dt_ini_ob",
             )
         with col3:
-            termino_obras_auto = st.checkbox(
-                "Calcular término pelas obras",
-                value=True,
-                key="aba1_termino_auto",
-                help="Usa: início das obras + duração máxima das etapas cadastradas em Custos de Obra. "
-                     "Desmarque para definir manualmente.",
-            )
+            # Duracao inicial derivada do modelo (termino - inicio, em meses)
+            _dur_modelo = max(1, (
+                (terreno.datas.termino_obras.year - terreno.datas.inicio_obras.year) * 12
+                + (terreno.datas.termino_obras.month - terreno.datas.inicio_obras.month)
+            ))
+            # Override enviado por sincronizar_aba3 quando o fluxo ultrapassa a duracao
+            _override = st.session_state.pop("_aba1_duracao_obras_override", None)
+            if _override is not None:
+                st.session_state["aba1_duracao_obras"] = int(_override)
 
-            if termino_obras_auto and duracao_calculada_meses is not None:
-                termino_obras_calculado = _add_meses(inicio_obras, duracao_calculada_meses)
+            duracao_obras_meses = int(st.number_input(
+                "Duração das obras (meses)",
+                value=_dur_modelo,
+                min_value=1,
+                step=1,
+                key="aba1_duracao_obras",
+                help="Contado a partir do início das obras. "
+                     "O término é calculado automaticamente.",
+            ))
+            termino_obras = _add_meses(inicio_obras, duracao_obras_meses)
+            st.caption(f"Término de obras: **{termino_obras.strftime('%m/%Y')}**")
+
+            if duracao_calculada_meses is not None and duracao_calculada_meses > duracao_obras_meses:
                 st.info(
-                    f"**Termino de obras (calculado):**  \n"
-                    f"{termino_obras_calculado.strftime('%m/%Y')}  \n"
-                    f"({duracao_calculada_meses} meses de obra)"
-                )
-                termino_obras = termino_obras_calculado
-            elif termino_obras_auto and duracao_calculada_meses is None:
-                st.warning("Nenhuma etapa de obra cadastrada em Custos de Obra. Usando o valor manual.")
-                termino_obras = _mes_ano(
-                    "Termino de obras (manual)",
-                    terreno.datas.termino_obras,
-                    "aba1_dt_fim_ob",
-                )
-            else:
-                termino_obras = _mes_ano(
-                    "Termino de obras (manual)",
-                    terreno.datas.termino_obras,
-                    "aba1_dt_fim_ob",
+                    f"As etapas de obra cobrem **{duracao_calculada_meses} meses**, "
+                    f"além da duração configurada ({duracao_obras_meses} meses). "
+                    "Salve a aba de obras para atualizar automaticamente."
                 )
 
         # A4: Avisos de conflitos de datas
