@@ -803,7 +803,8 @@ def _autosave(modo: str, result: dict | list, projeto) -> None:
                 nova_permuta_fisica = []
             else:  # permuta_fisica
                 nova_pf = None
-                nova_permuta_fisica = list(result)
+                _pf_data = result.get("permuta_items") if isinstance(result, dict) else result
+                nova_permuta_fisica = list(_pf_data) if _pf_data else []
 
         # --- Reconstruir Aba2Receitas (preservando fluxos e curva) ---
         nova_aba2 = projeto.receitas.model_copy(update={
@@ -866,29 +867,35 @@ def renderizar() -> None:
     )
 
     # Renderizar secao da opcao selecionada
-    if modo == "sem_pagamento":
-        st.markdown("---")
-        st.info(
-            "O terreno nao tem custo direto de aquisicao neste cenario "
-            "(ex.: doacao, integralizacao de capital, permuta total coberta pelas outras opcoes). "
-            "Nenhum desembolso sera lancado no fluxo de caixa."
-        )
-        result = {}
-        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
-            projeto.aquisicao, horizonte, marcos
-        )
-    elif modo == "direta":
-        result = _renderizar_opcao_direta(projeto, horizonte, marcos)
-    elif modo == "permuta_financeira":
-        result = _renderizar_opcao_permuta_financeira(projeto)
-        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
-            projeto.aquisicao, horizonte, marcos
-        )
-    else:
-        result = _renderizar_opcao_permuta_fisica(projeto)
-        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
-            projeto.aquisicao, horizonte, marcos
-        )
+    result: dict = {}
+    try:
+        if modo == "sem_pagamento":
+            st.markdown("---")
+            st.info(
+                "O terreno nao tem custo direto de aquisicao neste cenario "
+                "(ex.: doacao, integralizacao de capital, permuta total coberta pelas outras opcoes). "
+                "Nenhum desembolso sera lancado no fluxo de caixa."
+            )
+            result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+                projeto.aquisicao, horizonte, marcos
+            )
+        elif modo == "direta":
+            result = _renderizar_opcao_direta(projeto, horizonte, marcos)
+        elif modo == "permuta_financeira":
+            result = _renderizar_opcao_permuta_financeira(projeto)
+            result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+                projeto.aquisicao, horizonte, marcos
+            )
+        else:  # permuta_fisica
+            _pf_items = _renderizar_opcao_permuta_fisica(projeto)
+            result = {
+                "permuta_items": _pf_items,
+                "entrada_dinheiro": _renderizar_componente_dinheiro(
+                    projeto.aquisicao, horizonte, marcos
+                ),
+            }
+    except Exception:
+        pass  # erros de preenchimento nao interrompem a tela
 
     # Navegacao para o proximo modulo
     btn_proximo_modulo("Receitas")
