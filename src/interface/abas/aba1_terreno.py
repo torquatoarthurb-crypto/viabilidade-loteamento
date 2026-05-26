@@ -182,6 +182,48 @@ def _mes_ano(label: str, value: date, key: str) -> date:
     return date(ano, mes, 1)
 
 
+def _aviso_save(e: Exception) -> None:
+    """Exibe aviso amigavel (st.warning) para erros de validacao ao salvar."""
+    from pydantic import ValidationError as _VE
+
+    _campo_pt: dict[str, str] = {
+        "area_gleba_m2": "Área da gleba",
+        "area_sistema_viario_m2": "Sistema viário",
+        "area_verde_m2": "Área verde / lazer",
+        "area_institucional_m2": "Área institucional",
+        "area_app_m2": "APP",
+        "area_lotes_m2": "Área de lotes",
+        "inicio_projeto": "Início do projeto (M0)",
+        "aprovacao": "Aprovação",
+        "lancamento_vendas": "Lançamento de vendas",
+        "inicio_obras": "Início de obras",
+        "termino_obras": "Término de obras",
+    }
+    _msg_pt: dict[str, str] = {
+        "greater than 0": "deve ser maior que zero",
+        "greater than or equal to 0": "deve ser maior ou igual a zero",
+        "Field required": "campo obrigatório",
+        "less than or equal to": "valor muito alto",
+    }
+
+    if isinstance(e, _VE):
+        msgs: list[str] = []
+        for err in e.errors():
+            loc = err.get("loc", ())
+            campo = _campo_pt.get(str(loc[-1]) if loc else "", str(loc[-1]) if loc else "")
+            msg = err.get("msg", "dado inválido")
+            msg = msg.replace("Value error, ", "")
+            for _en, _pt in _msg_pt.items():
+                if _en in msg:
+                    msg = _pt
+                    break
+            msgs.append(f"**{campo}**: {msg}" if campo else msg)
+        texto = "\n\n".join(f"• {m}" for m in msgs)
+        st.warning(f"Dados incompletos ou inválidos — corrija e salve novamente:\n\n{texto}")
+    else:
+        st.warning("Não foi possível salvar. Verifique os dados e tente novamente.")
+
+
 def _calcular_duracao_obras(obras: Aba3Obras) -> int | None:
     if obras.modo == "resumido" and obras.resumido is not None:
         return int(obras.resumido.duracao_meses)
@@ -985,7 +1027,7 @@ def renderizar() -> None:
                 st.session_state[_TIP_HASH_KEY] = _tip_atual_hash
             st.rerun()
         except Exception as _e:
-            st.error(f"Erro ao salvar: {_e}")
+            _aviso_save(_e)
 
 
 def sincronizar_aba1() -> None:

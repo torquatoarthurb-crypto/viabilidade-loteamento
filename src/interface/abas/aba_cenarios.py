@@ -173,8 +173,8 @@ def _carregar_cenario(idx: int) -> None:
             if chave in st.session_state:
                 del st.session_state[chave]
         st.rerun()
-    except Exception as e:
-        st.error(f"Erro ao carregar cenario: {e}")
+    except Exception:
+        st.warning("Não foi possível carregar o cenário. Verifique os dados e tente novamente.")
 
 
 def _mostrar_tabela_cenarios(cenarios: list) -> None:
