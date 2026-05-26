@@ -868,6 +868,8 @@ def renderizar() -> None:
 
     # Renderizar secao da opcao selecionada
     result: dict = {}
+    _aviso_renderizacao: str | None = None
+
     try:
         if modo == "sem_pagamento":
             st.markdown("---")
@@ -876,29 +878,61 @@ def renderizar() -> None:
                 "(ex.: doacao, integralizacao de capital, permuta total coberta pelas outras opcoes). "
                 "Nenhum desembolso sera lancado no fluxo de caixa."
             )
-            result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
-                projeto.aquisicao, horizonte, marcos
-            )
-        elif modo == "direta":
-            result = _renderizar_opcao_direta(projeto, horizonte, marcos)
-        elif modo == "permuta_financeira":
-            result = _renderizar_opcao_permuta_financeira(projeto)
-            result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
-                projeto.aquisicao, horizonte, marcos
-            )
-        else:  # permuta_fisica
-            _pf_items = _renderizar_opcao_permuta_fisica(projeto)
-            result = {
-                "permuta_items": _pf_items,
-                "entrada_dinheiro": _renderizar_componente_dinheiro(
+            try:
+                result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
                     projeto.aquisicao, horizonte, marcos
-                ),
-            }
+                )
+            except Exception:
+                pass
+        elif modo == "direta":
+            try:
+                r = _renderizar_opcao_direta(projeto, horizonte, marcos)
+                if isinstance(r, dict):
+                    result = r
+            except Exception:
+                pass
+        elif modo == "permuta_financeira":
+            try:
+                r = _renderizar_opcao_permuta_financeira(projeto)
+                if isinstance(r, dict):
+                    result = r
+            except Exception:
+                pass
+            try:
+                result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+                    projeto.aquisicao, horizonte, marcos
+                )
+            except Exception:
+                pass
+        else:  # permuta_fisica
+            _pf_items: list = []
+            try:
+                _pf_items = _renderizar_opcao_permuta_fisica(projeto)
+            except Exception:
+                pass
+            _dinheiro = None
+            try:
+                _dinheiro = _renderizar_componente_dinheiro(
+                    projeto.aquisicao, horizonte, marcos
+                )
+            except Exception:
+                pass
+            result = {"permuta_items": _pf_items, "entrada_dinheiro": _dinheiro}
     except Exception:
-        pass  # erros de preenchimento nao interrompem a tela
+        _aviso_renderizacao = (
+            "Parte dos campos nao pode ser exibida. "
+            "Os dados salvos anteriormente foram preservados. "
+            "Tente navegar para outra aba e voltar."
+        )
+
+    if _aviso_renderizacao:
+        st.warning(_aviso_renderizacao)
 
     # Navegacao para o proximo modulo
-    btn_proximo_modulo("Receitas")
+    try:
+        btn_proximo_modulo("Receitas")
+    except Exception:
+        pass
 
     # Auto-save
     _autosave(modo, result, projeto)
