@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class Tipologia(BaseModel):
@@ -51,36 +51,14 @@ class Tipologia(BaseModel):
 
 
 class QuadroAreas(BaseModel):
-    """
-    Quadro de areas da gleba.
+    """Quadro de areas da gleba."""
 
-    Os campos podem ser informados em m2 OU em % da gleba. O modelo aceita
-    ambos e o validador garante que a soma feche com a area total.
-    """
-
-    area_gleba_m2: float = Field(..., gt=0, description="Area total da gleba em m2")
+    area_gleba_m2: float = Field(0, ge=0, description="Area total da gleba em m2")
     area_sistema_viario_m2: float = Field(0, ge=0)
     area_verde_m2: float = Field(0, ge=0)
     area_institucional_m2: float = Field(0, ge=0)
     area_app_m2: float = Field(0, ge=0)
     area_lotes_m2: float = Field(0, ge=0)
-
-    @model_validator(mode="after")
-    def _valida_soma(self) -> "QuadroAreas":
-        soma_partes = (
-            self.area_sistema_viario_m2
-            + self.area_verde_m2
-            + self.area_institucional_m2
-            + self.area_app_m2
-            + self.area_lotes_m2
-        )
-        # Tolerancia de 0.5% para arredondamentos
-        if soma_partes > 0 and abs(soma_partes - self.area_gleba_m2) / self.area_gleba_m2 > 0.005:
-            raise ValueError(
-                f"Soma das areas ({soma_partes:.2f} m2) difere da area da gleba "
-                f"({self.area_gleba_m2:.2f} m2) em mais de 0,5%"
-            )
-        return self
 
     @property
     def aproveitamento(self) -> float:
@@ -108,18 +86,6 @@ class DatasProjeto(BaseModel):
     lancamento_vendas: date
     inicio_obras: date
     termino_obras: date
-
-    @model_validator(mode="after")
-    def _valida_ordem(self) -> "DatasProjeto":
-        if self.aprovacao < self.inicio_projeto:
-            raise ValueError("Aprovacao nao pode ser anterior ao inicio do projeto")
-        if self.lancamento_vendas < self.inicio_projeto:
-            raise ValueError("Lancamento de vendas nao pode ser anterior ao inicio do projeto")
-        if self.inicio_obras < self.inicio_projeto:
-            raise ValueError("Inicio de obras nao pode ser anterior ao inicio do projeto")
-        if self.termino_obras <= self.inicio_obras:
-            raise ValueError("Termino de obras deve ser posterior ao inicio de obras")
-        return self
 
 
 class InfoEmpreendimento(BaseModel):
