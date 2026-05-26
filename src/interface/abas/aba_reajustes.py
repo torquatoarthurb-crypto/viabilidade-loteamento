@@ -253,6 +253,21 @@ def renderizar() -> None:
             max_value=50.0,
         )
 
+    # ============================================================
+    # SALVAR ABA
+    # ============================================================
+    st.markdown("---")
+    _col_sv_raj, _ = st.columns([1, 3])
+    with _col_sv_raj:
+        if st.button(
+            "Salvar aba",
+            key="aba_reajustes_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            st.rerun()
+
     btn_proximo_modulo("Dashboard", target_idx=0)
 
     # --- Auto-save ---

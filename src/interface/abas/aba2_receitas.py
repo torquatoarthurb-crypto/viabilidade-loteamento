@@ -995,6 +995,20 @@ def renderizar() -> None:
             )
 
     # ============================================================
+    # SALVAR ABA
+    # ============================================================
+    st.markdown("---")
+    _col_sv2, _ = st.columns([1, 3])
+    with _col_sv2:
+        salvar_aba2 = st.button(
+            "Salvar aba",
+            key="aba2_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        )
+
+    # ============================================================
     # NAVEGACAO
     # ============================================================
     btn_proximo_modulo("Obras")
@@ -1002,7 +1016,7 @@ def renderizar() -> None:
     # ============================================================
     # AUTO-SAVE
     # ============================================================
-    if mudou or salvar_outras:
+    if mudou or salvar_outras or salvar_aba2:
         _executar_save_aba2(
             ft_lista, projeto, receitas,
             outras_estado=st.session_state.get(CHAVE_OUTRAS_RECEITAS),

@@ -369,6 +369,25 @@ def renderizar() -> None:
         gatilho_tipo, gatilho_vendas_pct, gatilho_obras_pct,
     )
 
+    # ============================================================
+    # SALVAR ABA
+    # ============================================================
+    st.markdown("---")
+    _col_sv_fin, _ = st.columns([1, 3])
+    with _col_sv_fin:
+        if st.button(
+            "Salvar aba",
+            key="aba_financiamento_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            _autosave(
+                projeto, ativo, taxa, limite, carencia, comissao, iof, caixa_minimo,
+                gatilho_tipo, gatilho_vendas_pct, gatilho_obras_pct,
+            )
+            st.rerun()
+
     # Navegacao
     btn_proximo_modulo("Reajustes")
 

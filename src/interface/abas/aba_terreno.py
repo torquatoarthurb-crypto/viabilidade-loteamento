@@ -928,6 +928,20 @@ def renderizar() -> None:
     if _aviso_renderizacao:
         st.warning(_aviso_renderizacao)
 
+    # Salvar aba
+    st.markdown("---")
+    _col_sv_terr, _ = st.columns([1, 3])
+    with _col_sv_terr:
+        if st.button(
+            "Salvar aba",
+            key="aba_terreno_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            _autosave(modo, result, projeto)
+            st.rerun()
+
     # Navegacao para o proximo modulo
     try:
         btn_proximo_modulo("Receitas")

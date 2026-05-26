@@ -616,6 +616,21 @@ def renderizar() -> None:
         st.session_state["_aba3_valor_m2"] = float(valor_m2)
         st.session_state["_aba3_base_calculo"] = str(base)
 
+    # ============================================================
+    # SALVAR ABA
+    # ============================================================
+    st.markdown("---")
+    _col_sv3, _ = st.columns([1, 3])
+    with _col_sv3:
+        if st.button(
+            "Salvar aba",
+            key="aba3_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            salvar_fluxo = True
+
     # Navegacao para o proximo modulo
     btn_proximo_modulo("Incorporacao")
 

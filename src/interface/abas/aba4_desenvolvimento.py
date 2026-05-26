@@ -633,6 +633,22 @@ def renderizar() -> None:
                 misto_pct_ato = comissao_atual.misto_percentual_no_ato
                 misto_qtd = comissao_atual.misto_qtd_parcelas
 
+    # ============================================================
+    # SALVAR ABA
+    # ============================================================
+    st.markdown("---")
+    _col_sv4, _ = st.columns([1, 3])
+    with _col_sv4:
+        if st.button(
+            "Salvar aba",
+            key="aba4_salvar_aba",
+            type="primary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            sincronizar_aba4()
+            st.rerun()
+
     # Navegacao para o proximo modulo
     btn_proximo_modulo("Impostos")
 
