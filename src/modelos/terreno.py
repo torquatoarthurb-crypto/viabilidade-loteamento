@@ -19,13 +19,13 @@ class Tipologia(BaseModel):
 
     nome: str = Field(..., description="Nome da tipologia, ex.: 'Lote Padrao'")
     quantidade: int = Field(..., gt=0, description="Quantidade de lotes desta tipologia")
-    area_lote_m2: float = Field(..., gt=0, description="Area media do lote em m2")
+    area_lote_m2: float = Field(..., ge=0, description="Area media do lote em m2")
     modo_preco: Literal["por_m2", "por_lote"] = Field(
         default="por_m2",
         description="Se o preco e dado em R$/m2 ou em R$ por lote inteiro",
     )
     valor_unitario: float = Field(
-        ..., gt=0, description="R$/m2 (se modo_preco=por_m2) ou R$/lote (se por_lote)"
+        ..., ge=0, description="R$/m2 (se modo_preco=por_m2) ou R$/lote (se por_lote). Zero = lote nao comercializado."
     )
     gio_percentual: float = Field(
         default=0.0,

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pandas as pd
 import streamlit as st
 
 from ...modelos import (
@@ -209,9 +208,9 @@ def renderizar() -> None:
     # CARD 1 — IDENTIFICACAO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🏢 Identificacao")
+        st.markdown("#### Identificação")
 
-        col1, col2, col3, col4 = st.columns([3, 2, 1, 2])
+        col1, col2, col3, col4 = st.columns([3, 2, 1.2, 2])
         with col1:
             nome = st.text_input("Nome do empreendimento", value=terreno.info.nome)
         with col2:
@@ -258,7 +257,7 @@ def renderizar() -> None:
         longitude: float | None = terreno.info.longitude
         link_maps: str = terreno.info.link_maps or ""
 
-        with st.expander("📍 Localização no mapa (opcional)", expanded=False):
+        with st.expander("Localização no mapa (opcional)", expanded=False):
             st.caption(
                 "Importe um KMZ/KML com o polígono da área, cole o link do Google Maps, "
                 "ou informe as coordenadas manualmente."
@@ -280,11 +279,11 @@ def renderizar() -> None:
                     latitude = _lat_c
                     longitude = _lon_c
                     st.success(
-                        f"✅ Polígono importado: **{len(_kmz_coords)} pontos**. "
+                        f"Polígono importado: **{len(_kmz_coords)} pontos**. "
                         f"Centróide: {_lat_c:.5f}, {_lon_c:.5f}"
                     )
                 else:
-                    st.error("❌ Não foi possível extrair coordenadas. Verifique se o arquivo contém um polígono.")
+                    st.error("Não foi possível extrair coordenadas. Verifique se o arquivo contém um polígono.")
 
             st.markdown("---")
             link_maps = st.text_input(
@@ -301,7 +300,7 @@ def renderizar() -> None:
             if coords_gmaps and _kmz_coords is None:
                 latitude, longitude = coords_gmaps
                 st.success(
-                    f"✅ Coordenadas extraídas do link: **{latitude:.6f}**, **{longitude:.6f}**"
+                    f"Coordenadas extraídas do link: **{latitude:.6f}**, **{longitude:.6f}**"
                 )
             elif _kmz_coords is None:
                 _col_lat, _col_lon = st.columns(2)
@@ -332,7 +331,7 @@ def renderizar() -> None:
                 if _kmz_coords is not None:
                     import streamlit.components.v1 as _stc_kmz
                     _stc_kmz.html(_leaflet_html_poligono(_kmz_coords), height=360)
-                    st.caption(f"📍 Centróide: {latitude:.5f}, {longitude:.5f}")
+                    st.caption(f"Centróide: {latitude:.5f}, {longitude:.5f}")
                 else:
                     _gmaps_url = f"https://www.google.com/maps?q={latitude},{longitude}"
                     _col_btn, _col_info = st.columns([1, 3])
@@ -341,12 +340,12 @@ def renderizar() -> None:
                             f'<a href="{_gmaps_url}" target="_blank" '
                             f'style="display:inline-block;padding:6px 12px;background:#4A9EFF;'
                             f'color:#fff;border-radius:4px;text-decoration:none;font-size:13px;">'
-                            f'🗺️ Abrir no Google Maps</a>',
+                            f'Abrir no Google Maps</a>',
                             unsafe_allow_html=True,
                         )
                     with _col_info:
                         st.caption(
-                            f"📍 {latitude:.6f}, {longitude:.6f}  \n"
+                            f"{latitude:.6f}, {longitude:.6f}  \n"
                             f"[OpenStreetMap](https://www.openstreetmap.org/?mlat={latitude}&mlon={longitude})"
                         )
 
@@ -361,7 +360,7 @@ def renderizar() -> None:
                     _stc_loc.iframe(_osm_url, height=300, scrolling=False)
             else:
                 st.info(
-                    "💡 Importe um KMZ, cole um link do Google Maps ou informe as coordenadas "
+                    "Importe um KMZ, cole um link do Google Maps ou informe as coordenadas "
                     "para ver o mapa de localização."
                 )
 
@@ -369,7 +368,7 @@ def renderizar() -> None:
     # CARD 2 — QUADRO DE AREAS
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 📐 Quadro de Areas")
+        st.markdown("#### Quadro de Áreas")
 
         # U1: seletor de unidade de area (m², ha, alqueire mineiro)
         _UNIDADES = {"m²": 1.0, "ha": 10_000.0, "alqueire": 48_400.0}
@@ -435,28 +434,30 @@ def renderizar() -> None:
                     st.caption(f"= {formatar_num(m2, 0)} m²")
                 return m2
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        # 4 colunas iguais para as sub-areas (layout simetrico)
+        col_v, col_vd, col_ins, col_app_c = st.columns(4)
+        with col_v:
             area_viario = _area_input(
                 "Sistema viario",
                 key_m2="aba1_area_viario",
                 key_pct="aba1_pct_viario",
                 valor_m2=float(terreno.areas.area_sistema_viario_m2),
             )
-        with col2:
+        with col_vd:
             area_verde = _area_input(
                 "Area verde / lazer",
                 key_m2="aba1_area_verde",
                 key_pct="aba1_pct_verde",
                 valor_m2=float(terreno.areas.area_verde_m2),
             )
+        with col_ins:
             area_inst = _area_input(
                 "Area institucional",
                 key_m2="aba1_area_inst",
                 key_pct="aba1_pct_inst",
                 valor_m2=float(terreno.areas.area_institucional_m2),
             )
-        with col3:
+        with col_app_c:
             area_app = _area_input(
                 "APP",
                 key_m2="aba1_area_app",
@@ -466,13 +467,18 @@ def renderizar() -> None:
 
         area_outras = area_viario + area_verde + area_inst + area_app
         area_lotes_sugerida = max(area_gleba - area_outras, 0)
-        with col1:
+
+        # Area de lotes — toggle a esquerda, resultado a direita
+        col_chk, col_lot = st.columns([2, 3])
+        with col_chk:
             usar_subtracao = st.checkbox(
                 "Calcular area de lotes por subtracao", value=True, key="aba1_calc_lotes"
             )
+        with col_lot:
             if usar_subtracao:
                 area_lotes = area_lotes_sugerida
-                st.metric("Area de lotes (calculada)", formatar_num(area_lotes, 0) + " m²")
+                st.metric("Area de lotes", formatar_num(area_lotes, 0) + " m²",
+                          help="Calculada por subtração: gleba − viário − verde − institucional − APP")
             else:
                 if usar_pct and area_gleba > 0:
                     pct_lotes_atual = float(terreno.areas.area_lotes_m2) / area_gleba * 100
@@ -493,8 +499,14 @@ def renderizar() -> None:
                         min_value=0.0,
                     )
 
-        # Metricas de aproveitamento
+        # Indicadores de aproveitamento — secao de resultados destacada
         if area_gleba > 0:
+            st.markdown(
+                '<div style="margin:14px 0 8px;font-size:10px;font-weight:600;'
+                'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
+                'Indicadores de aproveitamento</div>',
+                unsafe_allow_html=True,
+            )
             _aprov = area_lotes / area_gleba * 100
             _infra = area_outras / area_gleba * 100
             _col_m1, _col_m2, _col_m3 = st.columns(3)
@@ -513,7 +525,7 @@ def renderizar() -> None:
     # CARD 3 — DATAS-CHAVE DO PROJETO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 📅 Datas-chave do Projeto")
+        st.markdown("#### Datas-chave do Projeto")
         st.caption(
             "Termino do projeto e calculado automaticamente: maior valor entre o termino "
             "de obras e (data da ultima parcela + 2 meses)."
@@ -587,7 +599,7 @@ def renderizar() -> None:
         if termino_obras <= inicio_obras:
             _erros_datas.append("O Término de Obras precisa ser posterior ao Início de Obras.")
         for _msg_data in _erros_datas:
-            st.warning(f"⚠️ {_msg_data}")
+            st.warning(_msg_data)
 
     # Linha do tempo abaixo das datas-chave
     try:
@@ -604,146 +616,221 @@ def renderizar() -> None:
     # ============================================================
     # CARD 4 — TIPOLOGIAS DE LOTE
     # ============================================================
+    _TIP_LISTA_KEY = "aba1_tip_lista"
+    _TIP_HASH_KEY = "aba1_tip_proj_hash"
+
+    def _tip_hash(tips: list) -> str:
+        return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
+                    for t in tips])
+
+    _proj_hash = _tip_hash(terreno.tipologias)
+    if st.session_state.get(_TIP_HASH_KEY) != _proj_hash:
+        st.session_state[_TIP_LISTA_KEY] = [
+            {
+                "nome": t.nome,
+                "qtd": t.quantidade,
+                "area_m2": t.area_lote_m2,
+                "modo": t.modo_preco,
+                "valor": t.valor_unitario,
+                "agio_pct": t.gio_percentual,
+            }
+            for t in terreno.tipologias
+        ]
+        st.session_state[_TIP_HASH_KEY] = _proj_hash
+        for _k in list(st.session_state.keys()):
+            if "_tipr_" in _k:
+                del st.session_state[_k]
+
+    lista: list[dict] = st.session_state.get(_TIP_LISTA_KEY, [])
+
     with st.container(border=True):
-        st.markdown("#### 🏘️ Tipologias de Lote")
+        st.markdown("#### Tipologias de Lote")
         st.caption("Adicione, edite ou remova tipologias na tabela abaixo.")
 
-        # Cache estavel: evita que o data_editor perca edicoes ao reconstruir o df do projeto
-        _TIP_DF_KEY = "aba1_tip_df_cache"
-        _TIP_HASH_KEY = "aba1_tip_proj_hash"
+        _col_w = [3, 0.8, 1.2, 1.4, 1.8, 0.8, 1.4, 2.4, 0.5]
+        if lista:
+            _hcols = st.columns(_col_w)
+            _hlabels = ["Nome", "Qtd", "Área (m²)", "Modo", "Valor unit. (R$)", "Ágio (%)", "Área total", "VGV", ""]
+            for _hc, _hl in zip(_hcols, _hlabels):
+                with _hc:
+                    st.markdown(
+                        f'<div style="font-size:10px;color:var(--stone-500);font-weight:600;'
+                        f'letter-spacing:0.06em;text-transform:uppercase;padding-bottom:3px;">{_hl}</div>',
+                        unsafe_allow_html=True,
+                    )
 
-        def _tip_hash(tips: list) -> str:
-            return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
-                        for t in tips])
+        lista_atual: list[dict] = []
+        _idx_remover: int | None = None
 
-        def _df_vazio() -> pd.DataFrame:
-            return pd.DataFrame({
-                "Nome": pd.Series(dtype="str"),
-                "Quantidade": pd.Series(dtype="int"),
-                "Area do lote (m²)": pd.Series(dtype="float"),
-                "Modo de preco": pd.Series(dtype="str"),
-                "Valor unitario (R$)": pd.Series(dtype="float"),
-                "Ágio (%)": pd.Series(dtype="float"),
+        for i, _item in enumerate(lista):
+            _cw = st.columns(_col_w)
+            with _cw[0]:
+                _nome_i = st.text_input(
+                    "nome", value=_item["nome"], key=f"_tipr_{i}_nome",
+                    label_visibility="collapsed",
+                )
+            with _cw[1]:
+                _qtd_i = st.number_input(
+                    "qtd", value=int(_item["qtd"]), min_value=1, step=1,
+                    key=f"_tipr_{i}_qtd", label_visibility="collapsed",
+                )
+            with _cw[2]:
+                _area_i = numero_brl(
+                    "area", value=float(_item["area_m2"]),
+                    key=f"_tipr_{i}_area", min_value=0.0, casas=2,
+                    label_visibility="collapsed",
+                )
+            with _cw[3]:
+                _modo_i = st.selectbox(
+                    "modo", options=["por_m2", "por_lote"],
+                    index=0 if _item["modo"] == "por_m2" else 1,
+                    key=f"_tipr_{i}_modo", label_visibility="collapsed",
+                )
+            with _cw[4]:
+                _valor_i = numero_brl(
+                    "valor", value=float(_item["valor"]),
+                    key=f"_tipr_{i}_valor", min_value=0.0, casas=2,
+                    label_visibility="collapsed",
+                )
+            with _cw[5]:
+                _agio_i = numero_brl(
+                    "agio", value=float(_item["agio_pct"]),
+                    key=f"_tipr_{i}_agio", min_value=0.0, casas=1,
+                    label_visibility="collapsed",
+                )
+            _area_tot_i = float(_qtd_i) * _area_i
+            _preco_base_i = _area_i * _valor_i if _modo_i == "por_m2" else _valor_i
+            _vgv_i = float(_qtd_i) * _preco_base_i * (1 + _agio_i / 100)
+            _area_tot_fmt = f"{int(round(_area_tot_i)):,}".replace(",", ".")
+            with _cw[6]:
+                st.markdown(
+                    f'<div style="padding:7px 0 0 0;font-size:12px;'
+                    f'font-family:\'DM Mono\',monospace;color:var(--stone-700);">{_area_tot_fmt} m²</div>',
+                    unsafe_allow_html=True,
+                )
+            with _cw[7]:
+                st.markdown(
+                    f'<div style="padding:7px 0 0 0;font-size:12px;'
+                    f'font-family:\'DM Mono\',monospace;color:var(--stone-700);">{formatar_brl(_vgv_i)}</div>',
+                    unsafe_allow_html=True,
+                )
+            with _cw[8]:
+                if st.button(
+                    "×", key=f"_tipr_{i}_del",
+                    icon=":material/delete:",
+                    help="Remover tipologia",
+                    width="stretch",
+                ):
+                    _idx_remover = i
+            lista_atual.append({
+                "nome": _nome_i.strip(),
+                "qtd": int(_qtd_i),
+                "area_m2": float(_area_i),
+                "modo": str(_modo_i),
+                "valor": float(_valor_i),
+                "agio_pct": float(_agio_i),
             })
 
-        _proj_hash = _tip_hash(terreno.tipologias)
-        if st.session_state.get(_TIP_HASH_KEY) != _proj_hash:
-            # Projeto mudou externamente (novo projeto aberto, duplicar, etc.) — recarrega
-            if terreno.tipologias:
-                st.session_state[_TIP_DF_KEY] = pd.DataFrame([
-                    {
-                        "Nome": t.nome,
-                        "Quantidade": t.quantidade,
-                        "Area do lote (m²)": t.area_lote_m2,
-                        "Modo de preco": t.modo_preco,
-                        "Valor unitario (R$)": t.valor_unitario,
-                        "Ágio (%)": t.gio_percentual,
-                    }
-                    for t in terreno.tipologias
-                ])
-            else:
-                st.session_state[_TIP_DF_KEY] = _df_vazio()
+        if _idx_remover is not None:
+            lista_atual.pop(_idx_remover)
+            for _k in list(st.session_state.keys()):
+                if "_tipr_" in _k:
+                    del st.session_state[_k]
+            st.session_state[_TIP_LISTA_KEY] = lista_atual
             st.session_state[_TIP_HASH_KEY] = _proj_hash
-            # Limpa delta obsoleto do data_editor para evitar conflito de indices
-            st.session_state.pop("aba1_tipologias", None)
+            st.rerun()
 
-        _df_base = st.session_state.get(_TIP_DF_KEY, _df_vazio())
+        if st.button("Adicionar tipologia", icon=":material/add:", key="aba1_tip_add"):
+            lista_atual.append({
+                "nome": f"Tipologia {len(lista_atual) + 1}",
+                "qtd": 1, "area_m2": 0.0, "modo": "por_m2",
+                "valor": 0.0, "agio_pct": 0.0,
+            })
+            for _k in list(st.session_state.keys()):
+                if "_tipr_" in _k:
+                    del st.session_state[_k]
+            st.session_state[_TIP_LISTA_KEY] = lista_atual
+            st.session_state[_TIP_HASH_KEY] = _proj_hash
+            st.rerun()
 
-        df_tipologias = st.data_editor(
-            _df_base,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Nome": st.column_config.TextColumn(required=True),
-                "Quantidade": st.column_config.NumberColumn(min_value=1, step=1, required=True),
-                "Area do lote (m²)": st.column_config.NumberColumn(min_value=0.01, format="%.2f"),
-                "Modo de preco": st.column_config.SelectboxColumn(
-                    options=["por_m2", "por_lote"], required=True
-                ),
-                "Valor unitario (R$)": st.column_config.NumberColumn(min_value=0.01, format="%.2f"),
-                "Ágio (%)": st.column_config.NumberColumn(
-                    min_value=0.0,
-                    format="%.1f",
-                    help="Percentual de ágio sobre o preço padrão para lotes especiais "
-                         "(esquinas, vistas, próximos ao clube). Ex.: 20 = +20% sobre o preço da tipologia. "
-                         "Zero = sem ágio.",
-                ),
-            },
-            key="aba1_tipologias",
-        )
-
-        # Persiste o estado atual do data_editor no cache proprio
-        st.session_state[_TIP_DF_KEY] = df_tipologias
-
-        # Item 7: duplicar tipologia existente
-        _nomes_tip = [
-            str(row.get("Nome", "")).strip()
-            for _, row in df_tipologias.iterrows()
-            if str(row.get("Nome", "")).strip()
-        ]
+        _nomes_tip = [d["nome"] for d in lista_atual if d["nome"]]
         if _nomes_tip:
             _c_dup_sel, _c_dup_btn = st.columns([3, 1])
             with _c_dup_sel:
                 _nome_dup = st.selectbox(
-                    "Duplicar tipologia",
-                    options=_nomes_tip,
-                    key="aba1_dup_sel",
+                    "Duplicar tipologia", options=_nomes_tip, key="aba1_dup_sel",
                 )
             with _c_dup_btn:
                 st.write("")
-                if st.button("Duplicar ↓", key="aba1_btn_dup", use_container_width=True,
-                             help="Cria uma cópia da tipologia selecionada com os mesmos valores"):
-                    _fonte = next(
-                        (row for _, row in df_tipologias.iterrows()
-                         if str(row.get("Nome", "")).strip() == _nome_dup),
-                        None,
-                    )
-                    if _fonte is not None:
-                        _novos = []
-                        for _, _row in df_tipologias.iterrows():
-                            _n = str(_row.get("Nome", "")).strip()
-                            if not _n:
-                                continue
-                            try:
-                                _novos.append(Tipologia(
-                                    nome=_n,
-                                    quantidade=int(_row["Quantidade"]),
-                                    area_lote_m2=float(_row["Area do lote (m²)"]),
-                                    modo_preco=str(_row["Modo de preco"]),
-                                    valor_unitario=float(_row["Valor unitario (R$)"]),
-                                    gio_percentual=float(_row.get("Ágio (%)", 0.0) or 0.0),
-                                ))
-                            except Exception:
-                                pass
-                        _novos.append(Tipologia(
-                            nome=f"{_nome_dup} (copia)",
-                            quantidade=int(_fonte.get("Quantidade", 1) or 1),
-                            area_lote_m2=float(_fonte.get("Area do lote (m²)", 0.0) or 0.0),
-                            modo_preco=str(_fonte.get("Modo de preco", "por_lote")),
-                            valor_unitario=float(_fonte.get("Valor unitario (R$)", 0.0) or 0.0),
-                            gio_percentual=float(_fonte.get("Ágio (%)", 0.0) or 0.0),
-                        ))
-                        _novo_terreno = projeto.terreno.model_copy(update={"tipologias": _novos})
-                        set_projeto(projeto.model_copy(update={"terreno": _novo_terreno}))
-                        invalidar_resultado()
+                if st.button(
+                    "Duplicar", key="aba1_btn_dup", width="stretch",
+                    icon=":material/content_copy:",
+                    help="Cria uma cópia da tipologia selecionada com os mesmos valores",
+                ):
+                    _fonte_dup = next((d for d in lista_atual if d["nome"] == _nome_dup), None)
+                    if _fonte_dup is not None:
+                        lista_atual.append({**_fonte_dup, "nome": f"{_nome_dup} (copia)"})
+                        for _k in list(st.session_state.keys()):
+                            if "_tipr_" in _k:
+                                del st.session_state[_k]
+                        st.session_state[_TIP_LISTA_KEY] = lista_atual
+                        st.session_state[_TIP_HASH_KEY] = _proj_hash
                         st.rerun()
+
+        _tip_editadas: list[Tipologia] = []
+        _tip_errors: list[str] = []
+        for _d in lista_atual:
+            _nome_t = _d["nome"]
+            if not _nome_t:
+                continue
+            try:
+                _tip_editadas.append(Tipologia(
+                    nome=_nome_t,
+                    quantidade=_d["qtd"],
+                    area_lote_m2=_d["area_m2"],
+                    modo_preco=_d["modo"],
+                    valor_unitario=_d["valor"],
+                    gio_percentual=_d["agio_pct"],
+                ))
+            except Exception as _e:
+                if hasattr(_e, "errors"):
+                    try:
+                        _msgs = [
+                            f"{e.get('loc', ['?'])[-1]}: {e.get('msg', '')}"
+                            for e in _e.errors()
+                        ]
+                        _tip_errors.append(f"'{_nome_t}': {'; '.join(_msgs)}")
+                    except Exception:
+                        _tip_errors.append(f"'{_nome_t}': dados inválidos")
+                else:
+                    _tip_errors.append(f"'{_nome_t}': {_e}")
+
+        _tip_atual_hash = _tip_hash(_tip_editadas)
+        _tip_dirty = bool(_tip_editadas) and _tip_atual_hash != _tip_hash(terreno.tipologias)
+
+        for _err in _tip_errors:
+            st.warning(f"Dados inválidos — {_err}")
+
+        salvar_tips = False
+        if _tip_dirty:
+            st.markdown(
+                '<div style="color:var(--accent-500);font-size:12px;padding-top:4px;">'
+                '● Tipologias com alterações não salvas — clique em "Salvar aba" abaixo.'
+                '</div>',
+                unsafe_allow_html=True,
+            )
 
         total_lotes = 0
         area_usada = 0.0
         vgv_total = 0.0
-        for _, row in df_tipologias.iterrows():
-            if not str(row.get("Nome", "")).strip():
+        for _d in lista_atual:
+            if not _d["nome"]:
                 continue
             try:
-                qtd = float(row.get("Quantidade", 0) or 0)
-                area_t = float(row.get("Area do lote (m²)", 0) or 0)
-                modo_t = str(row.get("Modo de preco", "por_lote"))
-                valor_t = float(row.get("Valor unitario (R$)", 0) or 0)
-                gio_t = float(row.get("Ágio (%)", 0.0) or 0.0)
-                total_lotes += int(qtd)
-                area_usada += qtd * area_t
-                preco_base = area_t * valor_t if modo_t == "por_m2" else valor_t
-                vgv_total += qtd * preco_base * (1 + gio_t / 100)
+                total_lotes += _d["qtd"]
+                area_usada += _d["qtd"] * _d["area_m2"]
+                _pb = _d["area_m2"] * _d["valor"] if _d["modo"] == "por_m2" else _d["valor"]
+                vgv_total += _d["qtd"] * _pb * (1 + _d["agio_pct"] / 100)
             except Exception:
                 continue
 
@@ -756,7 +843,7 @@ def renderizar() -> None:
             if area_lotes > 0:
                 saldo = area_lotes - area_usada
                 ok = saldo >= 0
-                icone = "✅" if ok else "❌"
+                icone = "✓" if ok else "✕"
                 st.metric(
                     f"{icone} Area de lotes",
                     f"{formatar_num(area_usada, 0)} m²",
@@ -769,12 +856,12 @@ def renderizar() -> None:
                     # B6: aviso de sub-utilizacao
                     if saldo > area_lotes * 0.02:
                         st.info(
-                            f"💡 {formatar_num(saldo, 0)} m² sem tipologia ({saldo / area_lotes * 100:.1f}%). "
+                            f"{formatar_num(saldo, 0)} m² sem tipologia ({saldo / area_lotes * 100:.1f}%). "
                             "Verifique se todas as tipologias foram cadastradas."
                         )
                 else:
                     st.warning(
-                        f"⚠️ Excedeu em {formatar_num(-saldo, 0)} m² "
+                        f"Excedeu em {formatar_num(-saldo, 0)} m² "
                         f"o limite de {formatar_num(area_lotes, 0)} m²"
                     )
             else:
@@ -790,12 +877,13 @@ def renderizar() -> None:
                 f" ({_frac * 100:.1f}%)"
             )
             st.markdown(
-                f'<div style="margin:4px 0 10px 0;">'
-                f'<div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">Ocupacao da area de lotes</div>'
-                f'<div style="background:#1F2937;border-radius:6px;height:12px;overflow:hidden;">'
+                f'<div style="margin:6px 0 10px 0;">'
+                f'<div style="font-size:10px;color:var(--stone-500);font-weight:600;'
+                f'letter-spacing:0.08em;text-transform:uppercase;margin-bottom:5px;">Ocupação da área de lotes</div>'
+                f'<div style="background:var(--stone-100);border-radius:6px;height:8px;overflow:hidden;">'
                 f'<div style="background:{_cor_bar};width:{_bar_w:.1f}%;height:100%;border-radius:6px;"></div>'
                 f'</div>'
-                f'<div style="font-size:11px;color:{_cor_bar};margin-top:3px;">{_label_bar}</div>'
+                f'<div style="font-size:11px;font-family:\'DM Mono\',monospace;color:{_cor_bar};margin-top:4px;">{_label_bar}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -806,29 +894,69 @@ def renderizar() -> None:
     btn_proximo_modulo("Terreno")
 
     # ============================================================
-    # AUTO-SAVE
+    # SAVE BUTTON (campos de identificacao, areas, datas + tipologias)
     # ============================================================
-    try:
-        tipologias = []
-        for _, row in df_tipologias.iterrows():
-            nome_t = str(row.get("Nome", "")).strip()
-            if not nome_t:
-                continue
-            try:
-                tipologias.append(
-                    Tipologia(
-                        nome=nome_t,
-                        quantidade=int(row["Quantidade"]),
-                        area_lote_m2=float(row["Area do lote (m²)"]),
-                        modo_preco=str(row["Modo de preco"]),
-                        valor_unitario=float(row["Valor unitario (R$)"]),
-                        gio_percentual=float(row.get("Ágio (%)", 0.0) or 0.0),
-                    )
-                )
-            except Exception:
-                continue
+    atual = projeto.terreno
 
-        if tipologias:
+    # Dirty check rapido (sem reconstruir Pydantic)
+    _dirty1 = (
+        atual.info.nome != nome
+        or atual.info.cidade != cidade
+        or atual.info.uf != uf.upper()
+        or atual.info.tipo_loteamento != tipo_loteamento
+        or atual.info.latitude != latitude
+        or atual.info.longitude != longitude
+        or atual.info.link_maps != link_maps
+        or atual.areas.area_gleba_m2 != area_gleba
+        or atual.areas.area_sistema_viario_m2 != area_viario
+        or atual.areas.area_verde_m2 != area_verde
+        or atual.areas.area_institucional_m2 != area_inst
+        or atual.areas.area_app_m2 != area_app
+        or atual.areas.area_lotes_m2 != area_lotes
+        or atual.datas.inicio_projeto != inicio_projeto
+        or atual.datas.aprovacao != aprovacao
+        or atual.datas.lancamento_vendas != lancamento
+        or atual.datas.inicio_obras != inicio_obras
+        or atual.datas.termino_obras != termino_obras
+        or _tip_dirty
+    )
+
+    # Staged: persiste valores atuais para sincronizar_aba1 usar antes do Calcular
+    st.session_state["_aba1_staged"] = {
+        "nome": nome, "cidade": cidade, "uf": uf,
+        "tipo_loteamento": tipo_loteamento,
+        "latitude": latitude, "longitude": longitude, "link_maps": link_maps,
+        "area_gleba": area_gleba, "area_viario": area_viario,
+        "area_verde": area_verde, "area_inst": area_inst,
+        "area_app": area_app, "area_lotes": area_lotes,
+        "inicio_projeto": inicio_projeto, "aprovacao": aprovacao,
+        "lancamento": lancamento, "inicio_obras": inicio_obras,
+        "termino_obras": termino_obras,
+        "tipologias": _tip_editadas if _tip_editadas else list(atual.tipologias),
+    }
+
+    st.markdown("---")
+    _col_ind1, _col_btn1 = st.columns([3, 1])
+    with _col_ind1:
+        if _dirty1:
+            st.markdown(
+                '<div style="color:var(--accent-500);font-size:12px;padding-top:6px;">'
+                '● Alterações não salvas</div>',
+                unsafe_allow_html=True,
+            )
+    with _col_btn1:
+        salvar_aba1 = st.button(
+            "Salvar aba",
+            key="aba1_salvar_aba",
+            type="primary" if _dirty1 else "secondary",
+            width="stretch",
+            icon=":material/save:",
+        )
+
+    # Processar save — botao de aba (geral) ou botao de tipologias
+    if salvar_aba1 or (salvar_tips and _tip_dirty):
+        try:
+            _tips_save = _tip_editadas if bool(_tip_editadas) else list(atual.tipologias)
             novo_terreno = Aba1Terreno(
                 info=InfoEmpreendimento(
                     nome=nome, cidade=cidade, uf=uf.upper(),
@@ -850,46 +978,53 @@ def renderizar() -> None:
                     inicio_obras=inicio_obras,
                     termino_obras=termino_obras,
                 ),
-                tipologias=tipologias,
+                tipologias=_tips_save,
             )
+            set_projeto(projeto.model_copy(update={"terreno": novo_terreno}))
+            invalidar_resultado()
+            if _tip_dirty:
+                st.session_state[_TIP_HASH_KEY] = _tip_atual_hash
+            st.rerun()
+        except Exception as _e:
+            st.error(f"Erro ao salvar: {_e}")
 
-            atual = projeto.terreno
-            mudou = (
-                atual.info.nome != novo_terreno.info.nome
-                or atual.info.cidade != novo_terreno.info.cidade
-                or atual.info.uf != novo_terreno.info.uf
-                or atual.info.tipo_loteamento != novo_terreno.info.tipo_loteamento
-                or atual.info.latitude != novo_terreno.info.latitude
-                or atual.info.longitude != novo_terreno.info.longitude
-                or atual.info.link_maps != novo_terreno.info.link_maps
-                or atual.areas.area_gleba_m2 != novo_terreno.areas.area_gleba_m2
-                or atual.areas.area_sistema_viario_m2 != novo_terreno.areas.area_sistema_viario_m2
-                or atual.areas.area_verde_m2 != novo_terreno.areas.area_verde_m2
-                or atual.areas.area_institucional_m2 != novo_terreno.areas.area_institucional_m2
-                or atual.areas.area_app_m2 != novo_terreno.areas.area_app_m2
-                or atual.areas.area_lotes_m2 != novo_terreno.areas.area_lotes_m2
-                or atual.datas.inicio_projeto != novo_terreno.datas.inicio_projeto
-                or atual.datas.aprovacao != novo_terreno.datas.aprovacao
-                or atual.datas.lancamento_vendas != novo_terreno.datas.lancamento_vendas
-                or atual.datas.inicio_obras != novo_terreno.datas.inicio_obras
-                or atual.datas.termino_obras != novo_terreno.datas.termino_obras
-                or len(atual.tipologias) != len(novo_terreno.tipologias)
-                or any(
-                    a.nome != b.nome or a.quantidade != b.quantidade
-                    or a.area_lote_m2 != b.area_lote_m2 or a.modo_preco != b.modo_preco
-                    or a.valor_unitario != b.valor_unitario
-                    or a.gio_percentual != b.gio_percentual
-                    for a, b in zip(atual.tipologias, novo_terreno.tipologias)
-                )
-            )
-            if mudou:
-                projeto_atualizado = projeto.model_copy(update={"terreno": novo_terreno})
-                set_projeto(projeto_atualizado)
-                invalidar_resultado()
-                # Atualiza hash para nao re-sincronizar o cache na proxima render
-                st.session_state["aba1_tip_proj_hash"] = str(
-                    [(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
-                     for t in tipologias]
-                )
+
+def sincronizar_aba1() -> None:
+    """Salva o estado da Aba 1 no projeto (chamado pelo sidebar antes de Calcular)."""
+    staged = st.session_state.get("_aba1_staged")
+    if staged is None:
+        return
+    try:
+        projeto = get_projeto()
+        novo_terreno = Aba1Terreno(
+            info=InfoEmpreendimento(
+                nome=staged["nome"],
+                cidade=staged["cidade"],
+                uf=staged["uf"].upper(),
+                tipo_loteamento=staged["tipo_loteamento"],
+                latitude=staged["latitude"],
+                longitude=staged["longitude"],
+                link_maps=staged["link_maps"],
+            ),
+            areas=QuadroAreas(
+                area_gleba_m2=staged["area_gleba"],
+                area_sistema_viario_m2=staged["area_viario"],
+                area_verde_m2=staged["area_verde"],
+                area_institucional_m2=staged["area_inst"],
+                area_app_m2=staged["area_app"],
+                area_lotes_m2=staged["area_lotes"],
+            ),
+            datas=DatasProjeto(
+                inicio_projeto=staged["inicio_projeto"],
+                aprovacao=staged["aprovacao"],
+                lancamento_vendas=staged["lancamento"],
+                inicio_obras=staged["inicio_obras"],
+                termino_obras=staged["termino_obras"],
+            ),
+            tipologias=staged["tipologias"],
+        )
+        if projeto.terreno.model_dump_json() != novo_terreno.model_dump_json():
+            set_projeto(projeto.model_copy(update={"terreno": novo_terreno}))
+            invalidar_resultado()
     except Exception:
-        pass  # erros de validacao serao mostrados pelo painel de pendencias
+        pass

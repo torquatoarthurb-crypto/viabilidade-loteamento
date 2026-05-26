@@ -14,6 +14,8 @@ from .receitas import (
     Aba2Receitas,
     FaixaCurvaVendas,
     FluxoRecebiveis,
+    FluxoTipologia,
+    OutraReceita,
     PermutaFisicaTipologia,
 )
 from .terreno import (
@@ -50,8 +52,10 @@ __all__ = [
     "EtapaObra",
     "FaixaCurvaVendas",
     "FluxoRecebiveis",
+    "FluxoTipologia",
     "InfoEmpreendimento",
     "OrcamentoResumido",
+    "OutraReceita",
     "ParametrosFinanceiros",
     "PermutaFinanceira",
     "PermutaFisicaTipologia",

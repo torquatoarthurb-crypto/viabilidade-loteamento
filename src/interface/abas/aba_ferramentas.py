@@ -31,12 +31,12 @@ def renderizar() -> None:
         "Sensibilidade, solvers de Margem Liquida alvo, benchmarks de mercado e simulador de faseamento.",
     )
     tabs = st.tabs([
-        "🤝 Negociacao",
-        "📊 Sensibilidade",
-        "🎯 Preco Minimo",
-        "🏗️ Terreno Maximo",
-        "📋 Benchmarks",
-        "🔀 Faseamento",
+        "Negociação",
+        "Sensibilidade",
+        "Preço Mínimo",
+        "Terreno Máximo",
+        "Benchmarks",
+        "Faseamento",
     ])
     with tabs[0]:
         _renderizar_calculadora_negociacao()
@@ -287,7 +287,7 @@ def _renderizar_solver_preco() -> None:
             f"{margem_pct_base:.1f}%" if margem_base is not None else "—",
         )
 
-    if not st.button("🔍 Calcular Preco Minimo", key="btn_solver_preco", type="primary"):
+    if not st.button("Calcular Preço Mínimo", key="btn_solver_preco", type="primary"):
         st.info("Defina a Margem Liquida alvo e clique em Calcular.")
         return
 
@@ -302,7 +302,7 @@ def _renderizar_solver_preco() -> None:
         )
         return
 
-    st.success(f"✅ Preco minimo encontrado para Margem Liquida = {margem_alvo_pct:.1f}%")
+    st.success(f"Preço mínimo encontrado para Margem Líquida = {margem_alvo_pct:.1f}%")
 
     vgv_novo = sum(
         t.quantidade * (t.area_lote_m2 if t.modo_preco == "por_m2" else 1)
@@ -398,7 +398,7 @@ def _renderizar_solver_terreno() -> None:
         st.metric("Margem atual do projeto",
                   f"{margem_pct_base:.1f}%" if margem_base is not None else "—")
 
-    if not st.button("🔍 Calcular Terreno Maximo", key="btn_solver_terreno", type="primary"):
+    if not st.button("Calcular Terreno Máximo", key="btn_solver_terreno", type="primary"):
         st.info("Defina a Margem Liquida minima e clique em Calcular.")
         return
 
@@ -417,7 +417,7 @@ def _renderizar_solver_terreno() -> None:
     gleba = areas.area_gleba_m2 or 1.0
     lotes_m2 = areas.area_lotes_m2 or 1.0
 
-    st.success(f"✅ Valor maximo do terreno para Margem Liquida ≥ {margem_alvo_pct:.1f}%")
+    st.success(f"Valor máximo do terreno para Margem Líquida ≥ {margem_alvo_pct:.1f}%")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Valor Maximo Total", formatar_brl(valor_max),
@@ -605,7 +605,7 @@ def _renderizar_calculadora_negociacao() -> None:
         )
 
     calcular = st.button("▶ Calcular Todos", key="btn_neg_calcular", type="primary",
-                         use_container_width=True)
+                         width="stretch")
 
     cache = st.session_state.get("_neg_cache")
 
@@ -814,8 +814,8 @@ def _mostrar_resultados_neg(projeto, resultado, cache: dict) -> None:
 
     def _status(ok: bool | None) -> str:
         if ok is None:
-            return "❌ Nao atingivel"
-        return "✅ Atingivel"
+            return "— Não atingível"
+        return "✓ Atingível"
 
     def _delta_str(fator) -> str:
         if fator is None:
@@ -838,18 +838,18 @@ def _mostrar_resultados_neg(projeto, resultado, cache: dict) -> None:
     if meses_max is None:
         linhas_res += (
             "<tr><td><b>Prazo maximo de vendas</b></td>"
-            "<td>❌ Nao atingivel</td><td>—</td></tr>"
+            "<td>— Não atingível</td><td>—</td></tr>"
         )
     elif meses_max >= 120:
         linhas_res += (
             "<tr><td><b>Prazo maximo de vendas</b></td>"
-            "<td>ℹ️ Irrelevante</td>"
+            "<td>— Irrelevante</td>"
             "<td>Margem bruta independe da velocidade de vendas</td></tr>"
         )
     else:
         linhas_res += (
             f"<tr><td><b>Prazo maximo de vendas</b></td>"
-            f"<td>✅ Atingivel</td>"
+            f"<td>✓ Atingível</td>"
             f"<td>Ate {meses_max} meses ({100.0/meses_max:.1f}%/mes)</td></tr>"
         )
 

@@ -41,7 +41,7 @@ def renderizar() -> None:
         "Cenarios e Simulacoes",
         "Compare diferentes versoes do projeto e avalie risco com Monte Carlo.",
     )
-    tabs = st.tabs(["📋 Comparativo de Cenarios", "🎲 Monte Carlo"])
+    tabs = st.tabs(["Comparativo de Cenários", "Monte Carlo"])
     with tabs[0]:
         _renderizar_cenarios()
     with tabs[1]:
@@ -72,16 +72,18 @@ def _renderizar_cenarios() -> None:
         )
     with col2:
         btn_salvar = st.button(
-            "💾 Salvar",
+            "Salvar",
             key="btn_salvar_cenario",
             disabled=(resultado is None),
-            use_container_width=True,
+            width="stretch",
             help="Salva o projeto e resultado atual como um cenario nomeado.",
+            icon=":material/save:",
         )
     with col3:
-        btn_limpar = st.button("🗑️ Limpar", key="btn_limpar_cenarios",
-                               use_container_width=True,
-                               help="Remove todos os cenarios salvos.")
+        btn_limpar = st.button("Limpar", key="btn_limpar_cenarios",
+                               width="stretch",
+                               help="Remove todos os cenarios salvos.",
+                               icon=":material/delete_sweep:")
 
     if resultado is None:
         st.warning("Calcule o fluxo de caixa antes de salvar um cenario.")
@@ -90,7 +92,7 @@ def _renderizar_cenarios() -> None:
 
     if btn_salvar and resultado and nome_cenario.strip():
         _salvar_cenario(nome_cenario.strip(), projeto, resultado)
-        st.success(f"✅ Cenario '{nome_cenario.strip()}' salvo.")
+        st.success(f"Cenário '{nome_cenario.strip()}' salvo.")
         st.rerun()
     elif btn_salvar and not nome_cenario.strip():
         st.error("Informe um nome para o cenario.")
@@ -120,14 +122,16 @@ def _renderizar_cenarios() -> None:
                 unsafe_allow_html=True,
             )
         with col_l:
-            if st.button("📂", key=f"btn_load_cen_{i}",
+            if st.button("Carregar", key=f"btn_load_cen_{i}",
                          help="Carregar este cenario como projeto ativo",
-                         use_container_width=True):
+                         width="stretch",
+                         icon=":material/folder_open:"):
                 _carregar_cenario(i)
         with col_d:
-            if st.button("🗑️", key=f"btn_del_cen_{i}",
+            if st.button("Remover", key=f"btn_del_cen_{i}",
                          help="Remover este cenario",
-                         use_container_width=True):
+                         width="stretch",
+                         icon=":material/delete:"):
                 cenarios.pop(i)
                 st.session_state[CHAVE_CENARIOS] = cenarios
                 st.rerun()
@@ -441,7 +445,7 @@ def _mostrar_resultados_mc(tirs: list[float], tir_base: float | None) -> None:
             f'<div style="background:#131822;border-radius:8px;padding:16px;margin-top:4px;text-align:center;">'
             f'<div style="font-size:11px;color:#9CA3AF;margin-bottom:4px;">'
             f'Prob. de TIR ≥ {tir_min:.0f}%</div>'
-            f'<div style="font-size:30px;font-weight:700;color:{cor_prob}">{prob:.0f}%</div>'
+            f'<div style="font-size:22px;font-weight:700;color:{cor_prob}">{prob:.0f}%</div>'
             f'<div style="font-size:10px;color:#9CA3AF;margin-top:2px;">'
             f'{int(prob * len(tirs) / 100)} de {len(tirs)} simulacoes</div>'
             f'</div>',

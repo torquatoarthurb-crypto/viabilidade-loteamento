@@ -68,6 +68,7 @@ def numero_brl(
     help: str | None = None,
     casas: int = 2,
     disabled: bool = False,
+    label_visibility: str = "visible",
 ) -> float:
     """
     Input numerico com separador de milhar BR (1.234.567,89).
@@ -98,7 +99,7 @@ def numero_brl(
     if help is not None:
         extra["help"] = help
 
-    texto = st.text_input(label=label, key=display_key, disabled=disabled, **extra)
+    texto = st.text_input(label=label, key=display_key, disabled=disabled, label_visibility=label_visibility, **extra)
 
     if not texto or not texto.strip():
         st.session_state[display_key] = _formatar_milhar(value, casas)
@@ -212,12 +213,12 @@ def cabecalho_aba(numero: int, titulo: str, descricao: str = "") -> None:
 
 def aviso_validacao(mensagem: str) -> None:
     """Mostra aviso de erro de validacao."""
-    st.error(f"⚠️ {mensagem}")
+    st.error(mensagem)
 
 
 def sucesso(mensagem: str) -> None:
     """Mostra mensagem de sucesso."""
-    st.success(f"✅ {mensagem}")
+    st.success(mensagem)
 
 
 def info(mensagem: str) -> None:
@@ -236,7 +237,6 @@ def renderizar_calcular_cta() -> bool:
     st.markdown(
         """
         <div class="card" style="text-align:center; padding:40px 20px;">
-            <div style="font-size:42px; margin-bottom:12px;">⚡</div>
             <div style="font-size:16px; font-weight:600; color:var(--text-primary);
                         margin-bottom:8px;">
                 Nenhum resultado calculado ainda
@@ -251,7 +251,7 @@ def renderizar_calcular_cta() -> bool:
 
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        if st.button("🧮 Calcular", type="primary", use_container_width=True,
+        if st.button("Calcular", type="primary", width="stretch",
                      key="cta_calcular"):
             try:
                 resultado = calcular_fluxo_caixa(get_projeto())
@@ -408,7 +408,7 @@ def criar_fig_linha_do_tempo(projeto):
 
 def linha_do_tempo(projeto, expandida: bool = True) -> None:
     """Renderiza a linha do tempo do projeto em um expander."""
-    with st.expander("📅 Linha do tempo do projeto", expanded=expandida):
+    with st.expander("Linha do tempo do projeto", expanded=expandida):
         fig = criar_fig_linha_do_tempo(projeto)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.caption(
@@ -425,7 +425,7 @@ def btn_proximo_modulo(label_proximo: str, target_idx: int | None = None) -> Non
         if st.button(
             f"Continuar — {label_proximo} →",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key=f"btn_nav_{label_proximo}",
         ):
             idx = st.session_state.get("modulo_atual_idx", 0)

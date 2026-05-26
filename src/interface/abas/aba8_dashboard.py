@@ -190,7 +190,7 @@ def _renderizar_pre_calc(projeto) -> None:
         '<div style="background:rgba(30,58,138,0.08);border-left:3px solid #2B50A8;'
         'padding:8px 12px;border-radius:0 4px 4px 0;font-size:12px;color:#1E3A8A;'
         'margin:12px 0;">'
-        '⚠️ Estimativas antes do calculo — dados precisos apos Calcular</div>',
+        'Estimativas antes do cálculo — dados precisos após Calcular</div>',
         unsafe_allow_html=True,
     )
     try:
@@ -245,9 +245,9 @@ def _renderizar_pre_calc(projeto) -> None:
         pass
 
     st.info(
-        "💡 Clique em **'Calcular viabilidade'** na sidebar "
+        "Clique em **'Calcular viabilidade'** na sidebar "
         "para ver os indicadores completos.  \n"
-        "🏡 Lembre-se de configurar a **Aquisição do Terreno** (sidebar → Dados) "
+        "Lembre-se de configurar a **Aquisição do Terreno** (sidebar → Dados) "
         "antes de calcular."
     )
 
@@ -268,17 +268,17 @@ def _renderizar_badge_veredito(r: dict, ind: dict, projeto) -> None:
     if vpl > 0 and tir_pct >= tma + 4 and margem >= 15:
         status = "VIÁVEL"
         cor_bg, cor_borda, cor_texto = "rgba(61,139,94,0.10)", "#3D8B5E", "#2E5F47"
-        icone = "✅"
+        icone = "✓"
         detalhe = f"VPL positivo · TIR {tir_pct:.1f}% (TMA+{tir_pct - tma:.1f} p.p.) · Margem {margem:.1f}%"
     elif vpl > 0 and margem >= 5:
         status = "MARGINAL"
         cor_bg, cor_borda, cor_texto = "rgba(176,125,46,0.10)", "#B07D2E", "#7A5520"
-        icone = "⚠️"
+        icone = "!"
         detalhe = f"VPL positivo · Margem {margem:.1f}% — revise premissas ou reduza custos"
     else:
         status = "INVIÁVEL"
         cor_bg, cor_borda, cor_texto = "rgba(192,84,84,0.10)", "#C05454", "#8B2E2E"
-        icone = "❌"
+        icone = "✕"
         motivo = "VPL negativo" if vpl <= 0 else f"Margem {margem:.1f}% insuficiente"
         detalhe = f"{motivo} — revise preços, custos ou prazo"
 
@@ -302,8 +302,8 @@ def _renderizar_badge_veredito(r: dict, ind: dict, projeto) -> None:
 _CSS_KPI_HEADLINE = """
 <style>
 .kpi-hl-grid{display:flex;gap:14px;margin-bottom:14px;}
-.kpi-hl{flex:1;background:#FFFFFF;border:0.5px solid #ECEAE4;border-radius:10px;
-         padding:20px 18px 16px;position:relative;overflow:hidden;}
+.kpi-hl{flex:1;background:#FFFFFF;border:1px solid #C4C1B8;border-radius:10px;
+         padding:16px 14px 12px;position:relative;overflow:hidden;}
 .kpi-hl::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;border-radius:10px 10px 0 0;}
 .kpi-hl.verde::before{background:#3D8B5E;}
 .kpi-hl.vermelho::before{background:#C05454;}
@@ -311,7 +311,7 @@ _CSS_KPI_HEADLINE = """
 .kpi-hl.neutro::before{background:#C4C1B8;}
 .kpi-hl-label{font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;
                color:#8A8880;margin-bottom:10px;}
-.kpi-hl-valor{font-family:'DM Serif Display',serif;font-size:30px;font-weight:400;
+.kpi-hl-valor{font-family:'DM Serif Display',serif;font-size:22px;font-weight:400;
                color:#1A1916;line-height:1.1;margin-bottom:6px;}
 .kpi-hl.verde .kpi-hl-valor{color:#2E5F47;}
 .kpi-hl.vermelho .kpi-hl-valor{color:#8B2E2E;}
@@ -337,16 +337,16 @@ def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
     tir_pct = tir * 100 if tir else 0
     if tir is not None:
         if tir_pct >= tma:
-            tir_cor, tir_sub = "verde", f"✅ Acima da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "verde", f"Acima da TMA ({tma:.0f}% a.a.)"
         elif tir_pct >= tma * 0.85:
-            tir_cor, tir_sub = "atencao", f"⚠️ Próxima da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "atencao", f"Próxima da TMA ({tma:.0f}% a.a.)"
         else:
-            tir_cor, tir_sub = "vermelho", f"❌ Abaixo da TMA ({tma:.0f}% a.a.)"
+            tir_cor, tir_sub = "vermelho", f"Abaixo da TMA ({tma:.0f}% a.a.)"
     else:
         tir_cor, tir_sub = "neutro", "TIR não convergiu"
 
     vpl_cor = "verde" if vpl > 0 else "vermelho"
-    vpl_sub = "✅ Projeto viável" if vpl > 0 else "❌ Projeto inviável"
+    vpl_sub = "Projeto viável" if vpl > 0 else "Projeto inviável"
     marg_cor = "verde" if margem >= 15 else ("atencao" if margem > 0 else "vermelho")
     marg_sub = f"Resultado / VGV Vendável · R$ {lucro / 1e6:.1f}M".replace(".", ",")
 
@@ -743,9 +743,9 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
     ))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
     st.caption(
-        "🔴 Area vermelha: capital em exposicao. "
-        "🟢 Area verde: zona de retorno. "
-        "Linha pontilhada azul clara: saldo descontado pela TMA — quando chega ao zero, e o payback descontado."
+        "Area vermelha: capital em exposição. "
+        "Area verde: zona de retorno. "
+        "Linha pontilhada azul clara: saldo descontado pela TMA — quando chega ao zero, é o payback descontado."
     )
 
 
@@ -1109,7 +1109,7 @@ def _tabela_fluxo_mensal(df) -> None:
         compacto = st.toggle("Compacto", value=False, key="tabela_fluxo_compacto",
                              help="Exibe apenas as linhas de totais e saldo, ocultando o detalhe por categoria.")
     with col_b:
-        if st.button("⛶ Tela cheia", key="btn_tela_cheia_fluxo", use_container_width=True):
+        if st.button("⛶ Tela cheia", key="btn_tela_cheia_fluxo", width="stretch"):
             _dlg_fluxo_tela_cheia(
                 _agregar_df(df, periodo),
                 st.session_state.get("_fluxo_marcos_labels_cache"),
@@ -1188,7 +1188,7 @@ def _renderizar_preview_financiamento(df, resultado, projeto) -> None:
         st.markdown(
             f'<div style="background:rgba(43,80,168,0.07);border-left:3px solid #4A7FA5;'
             f'padding:10px 14px;border-radius:0 6px 6px 0;margin:16px 0 4px 0;">'
-            f'<b>💳 Estimativa de custo financeiro</b> '
+            f'<b>Estimativa de custo financeiro</b> '
             f'<span style="font-size:12px;color:#6B7280;">— se usar linha de crédito a '
             f'{taxa:.2f}% a.m. ({taxa_aa * 100:.1f}% a.a.). '
             f'Fluxo de caixa não é alterado.</span></div>',
@@ -1248,11 +1248,11 @@ def renderizar() -> None:
                 )
                 html_bytes = gerar_relatorio_html(projeto, resultado).encode("utf-8")
                 st.download_button(
-                    "📄 PDF",
+                    "PDF",
                     data=html_bytes,
                     file_name=f"relatorio_{nome_padrao}.html",
                     mime="text/html",
-                    use_container_width=True,
+                    width="stretch",
                     help="Baixa HTML. Abra no navegador e pressione Ctrl+P para salvar como PDF.",
                 )
             except Exception:
@@ -1295,7 +1295,7 @@ def renderizar() -> None:
     # Aviso de reajustes — colapsado por padrão, aparece uma vez acima dos tabs
     try:
         if not projeto.reajustes.ativo:
-            with st.expander("💡 Reajustes monetários não ativados", expanded=False):
+            with st.expander("Reajustes monetários não ativados", expanded=False):
                 st.markdown(
                     "O custo de obras pode estar **subestimado** sem a correção pelo INCC ao longo do prazo de construção.  \n"
                     "Configure em **Reajustes** (sidebar → Avançado → Reajustes) para simular o impacto da inflação setorial."
@@ -1306,10 +1306,10 @@ def renderizar() -> None:
     st.markdown("---")
 
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Curva de Caixa",
-        "📊 Mensal e Receitas",
-        "🏗 Obras e Vendas",
-        "📋 DRE",
+        "Curva de Caixa",
+        "Mensal e Receitas",
+        "Obras e Vendas",
+        "DRE",
     ])
 
     with tab1:
@@ -1335,7 +1335,7 @@ def renderizar() -> None:
         st.markdown("---")
         _renderizar_nominal_vs_financeiro(r)
         st.markdown("---")
-        with st.expander("🍩 Composição de Saídas por Categoria", expanded=False):
+        with st.expander("Composição de Saídas por Categoria", expanded=False):
             st.caption("Participação de cada categoria de custo no total de saídas.")
             _renderizar_composicao_saidas(r)
 

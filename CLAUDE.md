@@ -29,363 +29,411 @@ python -m streamlit run app.py
 ## 2. Estrutura do Projeto
 
 ```
-viabilidade_loteamento/
+Rev_04/
 ├── app.py                              # Entry point Streamlit
-├── rodar.py                            # Modo CLI (alternativo)
+├── rodar.py                            # Modo CLI: calcula e exporta Excel via terminal
 ├── auto_teste.py                       # 7 testes matemáticos da engine
-├── README.md, INSTALACAO.md, INTERFACE.md, GUIA_JSON.md
+├── teste_exportadores.py               # 140 testes de integração (Excel + HTML)
 ├── requirements.txt
 ├── .streamlit/config.toml              # Tema escuro
+├── assets/
+│   ├── favicon.svg
+│   ├── logo_dark.svg
+│   └── logo_light.svg
+├── dados/                              # Projetos salvos dos usuários (JSON)
+│   ├── usuarios.json
+│   └── projetos/<usuario>/
 ├── exemplos/
-│   └── projeto_exemplo.json            # "Loteamento Vila Verde", 224 lotes
+│   ├── projeto_exemplo.json            # "Loteamento Vila Verde", 224 lotes
+│   └── projeto_exemplo_resultado.xlsx  # Excel de referência
 └── src/
+    ├── auth/
+    │   └── gerenciador.py              # Autenticação e sessão de usuário
     ├── modelos/                        # Pydantic (dados de entrada)
     │   ├── terreno.py                  # Aba1Terreno, Tipologia, QuadroAreas, DatasProjeto, InfoEmpreendimento
-    │   │                               # InfoEmpreendimento tem: nome, cidade, uf, latitude, longitude, link_maps
-    │   ├── receitas.py                 # Aba2Receitas, FluxoRecebiveis, FaixaCurvaVendas
+    │   ├── receitas.py                 # Aba2Receitas, FluxoTipologia, FluxoRecebiveis (legado), FaixaCurvaVendas (legado)
     │   ├── obras.py                    # Aba3Obras, EtapaObra, OrcamentoResumido
     │   ├── desenvolvimento.py          # Aba4Desenvolvimento, DespesaTemporal, Administracao
-    │   │                               # DespesaTemporal tem: modo_valor ("fixo"|"pct_vgv"), percentual_vgv
     │   ├── tributos.py                 # Aba5Impostos, Tributos, ComissaoVenda, PermutaFinanceira
     │   ├── financeiro.py               # AquisicaoTerreno, ParametrosFinanceiros (TMA)
-    │   ├── projeto.py                  # Projeto (objeto raiz)
-    │   └── construtores.py             # projeto_novo() (template)
+    │   ├── reajustes.py                # ConfigReajustes (correção monetária nas parcelas)
+    │   ├── projeto.py                  # Projeto (objeto raiz — agrega todos os modelos)
+    │   └── construtores.py             # projeto_novo() (template com defaults sensatos)
     ├── engine/                         # Cálculos matemáticos (sem Streamlit)
     │   ├── utilidades.py               # parcela_price, curva_s, meses_entre, etc.
     │   ├── indicadores_financeiros.py  # NPV, IRR (próprios — sem numpy_financial)
-    │   ├── recebimentos.py             # Vendas → fluxo de recebíveis
+    │   ├── recebimentos.py             # Vendas → fluxo de recebíveis por tipologia
     │   ├── despesas.py                 # Distribuição temporal de despesas
+    │   ├── financiamento_engine.py     # Financiamento do terreno com caixa mínimo
     │   └── fluxo_caixa.py              # Orquestrador principal → ResultadoCalculo
     ├── io_projeto/
-    │   ├── json_io.py                  # Carregar/salvar JSON
-    │   ├── exportar_excel.py           # Gerar relatório .xlsx (5 abas: Apresentação + 4)
-    │   └── exportar_html.py            # C11: exportação HTML para impressão como PDF
+    │   ├── json_io.py                  # Carregar/salvar JSON + _migrar_receitas_v2 (legado)
+    │   ├── exportar_excel.py           # 9 abas: Dashboard, Terreno, Receitas, Obras, Desenvolvimento, Impostos, Fluxo, Verificacao, Simulacao
+    │   └── exportar_html.py            # Relatório HTML self-contained para impressão/PDF
     └── interface/                      # Streamlit (apresentação)
-        ├── helpers.py                  # Formatação BRL, marcos, linha_do_tempo SVG (usada só na Aba 0)
-        ├── tabela_mensal.py            # Componente: gráfico Plotly (read-only) + atalhos_por_intervalos
+        ├── helpers.py                  # Formatação BRL, marcos, get/set_projeto, etc.
+        ├── tabela_mensal.py            # tabela_mensal_distribuicao (read-only) + atalhos_por_intervalos
         ├── tema.py                     # CSS customizado (tema escuro, variáveis CSS)
-        ├── tema_componentes.py         # Header, KPI cards, linha do tempo em trilhas, título módulo
-        ├── validacoes.py               # 13 regras de plausibilidade
-        ├── sidebar.py                  # Sidebar: Ações + auto-calc + hash cache + histórico + modo apresentação
+        ├── tema_componentes.py         # Header, KPI cards, linha do tempo, título módulo
+        ├── validacoes.py               # Regras de plausibilidade (erro/aviso/dica)
+        ├── sidebar.py                  # Sidebar: Ações + auto-calc + hash cache + histórico
         └── abas/
-            ├── aba0_visao_geral.py     # Módulo 0: KPIs, saúde, linha do tempo + estimativas pré-cálculo (D3)
-            ├── aba1_terreno.py         # Módulo 1: Identificação, áreas, tipologias + mapa OSM (E5)
-            ├── aba_terreno.py          # Módulo 9: Terreno avançado (aquisição do terreno separada)
-            ├── aba2_receitas.py        # Módulo 2: Aquisição terreno, fluxos recebíveis, curva de vendas
-            ├── aba3_obras.py           # Módulo 3: Etapas com gráfico Plotly de distribuição
-            ├── aba4_desenvolvimento.py # Módulo 4: Despesas com % VGV + gráfico Plotly de distribuição
+            ├── aba_login.py            # Módulo Login
+            ├── aba_home.py             # Módulo Home (pós-login)
+            ├── aba_projetos.py         # Módulo 12: Biblioteca de projetos (C8)
+            ├── aba0_visao_geral.py     # Módulo 0: KPIs, saúde, linha do tempo (D3)
+            ├── aba1_terreno.py         # Módulo 1: Identificação, áreas, tipologias, mapa (E5)
+            ├── aba_terreno.py          # Módulo 9: Aquisição do terreno
+            ├── aba2_receitas.py        # Módulo 2: FluxoTipologia (fluxo + curva por tipologia)
+            ├── aba3_obras.py           # Módulo 3: Etapas de obra com Plotly
+            ├── aba4_desenvolvimento.py # Módulo 4: Despesas de incorporação + gráfico
             ├── aba5_impostos.py        # Módulo 5: Tributos + comissão
-            ├── aba6_resultado.py       # Módulo 6: Resultado estático (aba6 separada de placeholders)
-            ├── aba7_fluxo.py           # Módulo 7: TMA + indicadores
-            ├── aba8_dashboard.py       # Módulo 8: Dashboard com gráficos Plotly
-            ├── aba_ferramentas.py      # Módulo 10: Sensibilidade, Solver Preço, Solver Terreno, Faseamento, Benchmarks
-            ├── aba_cenarios.py         # Módulo 11: Comparativo de Cenários + Monte Carlo
-            └── aba_projetos.py         # Módulo 12: Gestão de múltiplos projetos (biblioteca)
+            ├── aba_reajustes.py        # Módulo Reajustes: correção monetária
+            ├── aba_financiamento.py    # Módulo Financiamento: financiamento do terreno
+            ├── aba6_resultado.py       # Módulo 6: DRE completa
+            ├── aba7_fluxo.py           # Módulo 7: TMA + tabela fluxo mensal
+            ├── aba8_dashboard.py       # Módulo 8: Dashboard gráficos Plotly
+            ├── aba_ferramentas.py      # Módulo 10: Sensibilidade, Solvers, Faseamento, Benchmarks
+            └── aba_cenarios.py         # Módulo 11: Comparativo de Cenários + Monte Carlo
 ```
 
 ---
 
-## 3. Arquitetura e Decisões de Design
+## 3. Fluxograma do Sistema
 
-### Fluxo de dados
+### Jornada do usuário
+
 ```
-Usuário (interface) → session_state → Pydantic (validação) → engine → resultado → interface
-                                                                    ↘ exportador Excel / HTML
+┌─────────────────────────────────────────────────────────────────┐
+│  ENTRADA                                                        │
+│                                                                 │
+│  Login ──► Biblioteca de Projetos ──► Abre/Cria projeto        │
+│                                                                 │
+│  Módulo 1  Módulo 9   Módulo 2         Módulo 3   Módulo 4     │
+│  Terreno   Aquis.     Receitas          Obras      Despesas    │
+│  Tipol.    Terreno    FluxoTipologia   Etapas     Incorpor.   │
+│    │          │            │               │          │         │
+│    └──────────┴────────────┴───────────────┴──────────┘         │
+│                           │                                     │
+│                    Módulo 5 + 7                                  │
+│                    Impostos + TMA                               │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                     [ Calcular ]  ◄─── Ctrl+Enter
+                            │
+┌───────────────────────────▼─────────────────────────────────────┐
+│  ENGINE (src/engine/)                                           │
+│                                                                 │
+│  calcular_fluxo_caixa(Projeto) ──► ResultadoCalculo            │
+│                                                                 │
+│  ┌────────────────────────────────────────────────┐            │
+│  │  Para cada FluxoTipologia:                     │            │
+│  │  VGV tipologia × curva_mensal[mes] × fator     │            │
+│  │  → parcelas (sinal + obra + balões + financ.)  │            │
+│  │  → principal separado dos juros (Price)        │            │
+│  └────────────────────────────────────────────────┘            │
+│                                                                 │
+│  + despesas.py  + impostos  + comissão  + permuta              │
+│  → saldo mensal → VPL, TIR, Payback, Exposição máxima         │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+┌───────────────────────────▼─────────────────────────────────────┐
+│  RESULTADOS                                                     │
+│                                                                 │
+│  Módulo 0        Módulo 6      Módulo 7      Módulo 8           │
+│  Visão Geral     DRE completa  Fluxo+TIR     Dashboard         │
+│  KPIs + saúde    Margens       Tabela        Gráficos          │
+│                                                                 │
+│  Módulo 10       Módulo 11                                      │
+│  Ferramentas     Cenários                                       │
+│  Sensib./Solver  Comparativo / Monte Carlo                     │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │
+                  ┌─────────┴─────────┐
+                  │                   │
+           [ Excel .xlsx ]    [ HTML → PDF ]
+           9 abas auditoria   Relatório comitê
 ```
+
+### Fluxo técnico de dados
+
+```
+Usuário edita campo
+        │
+        ▼
+session_state (fonte da verdade da sessão)
+        │
+        ▼  (auto-save a cada mudança)
+Pydantic valida → Projeto imutável
+        │
+        ▼  (somente ao clicar Calcular)
+engine/fluxo_caixa.py
+        │
+   ┌────┴────┐
+   │         │
+recebimentos  despesas
+.py           .py
+   │         │
+   └────┬────┘
+        │
+   fluxo de caixa mensal (DataFrame)
+        │
+   indicadores_financeiros.py
+        │
+   ResultadoCalculo
+        │
+   ┌────┴────────────┐
+   │                 │
+interface         exportar_
+(leitura)         excel/html
+```
+
+### Modelo de dados central (`FluxoTipologia`)
+
+Cada tipologia de lote possui **um objeto único** que concentra:
+
+```
+FluxoTipologia
+├── nome_tipologia          → vincula à Tipologia do Módulo 1
+├── Fluxo de recebíveis     → sinal% + obra% + balões% + financiamento% = 100%
+│   ├── percentual_sinal / qtd_parcelas_sinal
+│   ├── percentual_obra / juros_parcelas_obra_am
+│   ├── percentual_baloes / qtd_baloes
+│   └── percentual_financiamento / qtd_parcelas_financiamento / juros_financiamento_am
+├── curva_mensal            → {mes: % do estoque desta tipologia} — soma 100%
+└── fatores_preco           → {mes: multiplicador} — preço progressivo (opcional)
+```
+
+O fluxo de caixa final é **a soma dos fluxos de todas as tipologias**.
+
+---
+
+## 4. Arquitetura e Decisões de Design
 
 ### Princípios
 1. **Engine é pura**: o módulo `engine/` não conhece Streamlit nem JSON. Recebe um `Projeto` e devolve um `ResultadoCalculo`.
 2. **Modelos são imutáveis** durante o cálculo: cada mudança gera um novo `Projeto` via `model_copy(update={...})`.
-3. **Auto-save em todas as abas**: NÃO há botões "Salvar Aba". Cada alteração é gravada no `session_state` e o `Projeto` é reconstruído silenciosamente. Erros de validação não impedem o salvamento — eles aparecem no painel de pendências da sidebar.
+3. **Auto-save em todas as abas**: NÃO há botões "Salvar Aba". Cada alteração é gravada no `session_state` e o `Projeto` é reconstruído silenciosamente. Erros de validação não impedem o salvamento — aparecem no painel de pendências da sidebar.
 4. **Interface não calcula**: cálculos só rodam quando o usuário clica em "Calcular fluxo de caixa". Se o projeto muda, o resultado é invalidado (`invalidar_resultado()`).
-5. **Receita nominal vs receita financeira**: o sistema separa o **principal** (= VGV exato) dos **juros** embutidos nas parcelas Price. Isso é crítico para o cálculo correto de impostos.
-6. **Distribuição temporal é sempre lida via gráfico + intervalos**: `tabela_mensal_distribuicao` renderiza um gráfico Plotly read-only; a edição acontece exclusivamente via `atalhos_por_intervalos` (ferramenta de faixas).
+5. **Receita nominal vs receita financeira**: o sistema separa o **principal** (= VGV exato) dos **juros** embutidos nas parcelas Price. Crítico para cálculo correto de impostos.
+6. **Distribuição temporal via gráfico + intervalos**: `tabela_mensal_distribuicao` renderiza gráfico Plotly read-only; edição exclusivamente via `atalhos_por_intervalos`.
+
+### Retrocompatibilidade (JSONs antigos)
+`json_io.py` possui `_migrar_receitas_v2()` que converte automaticamente o formato antigo (`fluxos_recebiveis + curva_vendas`) para o novo (`fluxos_tipologia`) antes da validação Pydantic. Os campos legado são mantidos como opcionais em `Aba2Receitas`.
 
 ### Conceitos do domínio (linguagem do mercado)
 - **VGV bruto**: valor geral de vendas (somatório de todos os lotes)
 - **VGV vendável**: VGV bruto menos lotes destinados à permuta física
-- **Permuta física**: parte do terreno é paga em lotes (não geram receita)
+- **Permuta física**: parte do terreno paga em lotes (não geram receita)
 - **Permuta financeira**: parte do VGV vai pro vendedor do terreno em dinheiro
-- **Fluxo de recebíveis**: composição do pagamento de uma venda (sinal % + parcelas obra % + balões % + financiamento %). **Sempre soma 100%.**
-- **Curva de vendas**: distribuição mês a mês de quantos % do estoque é vendido em cada mês. **Sempre soma 100%.**
+- **Fluxo de recebíveis**: composição do pagamento de uma venda (sinal + obra + balões + financiamento). **Sempre soma 100%.**
+- **Curva de vendas**: distribuição mensal de % do estoque vendido. **Sempre soma 100% por tipologia.**
 - **Sistema Price**: parcelas iguais com decomposição mensal entre principal e juros
-- **BDI**: Benefícios e Despesas Indiretas (multiplicador sobre custo direto, ~15-25% típico)
-- **Contingência**: reserva sobre o total já com BDI (~5-10% típico)
-- **TMA**: Taxa Mínima de Atratividade (custo de oportunidade, ~10-18% a.a. típico)
-- **Exposição máxima**: maior valor negativo do saldo acumulado (capital máximo necessário)
+- **BDI**: Benefícios e Despesas Indiretas (~15-25% sobre custo direto)
+- **Contingência**: reserva sobre custo com BDI (~5-10%)
+- **TMA**: Taxa Mínima de Atratividade (~10-18% a.a. típico)
+- **Exposição máxima**: maior valor negativo do saldo acumulado (capital necessário)
 
 ---
 
-## 4. Estado Atual (versão 0.7.0)
+## 5. Estado Atual (versão 0.8.0)
 
-### O que está pronto e funcionando
-
-#### Engine matemática (100%)
-- ✅ Sistema Price com decomposição principal/juros (validado: soma principal = VGV exato)
+### Engine matemática (100%)
+- ✅ Sistema Price com decomposição principal/juros (receita nominal = VGV exato, invariante validada)
 - ✅ Curva S logística simétrica
 - ✅ NPV + IRR (Newton-Raphson com bisseção fallback)
-- ✅ Recebimentos: sinal, parcelas obra, balões anuais, financiamento Price pós-obra
-- ✅ Quantidade de balões calculada automaticamente (1 a cada 12 meses até término obras)
-- ✅ Receita NOMINAL separada de receita FINANCEIRA (juros embutidos)
+- ✅ Recebimentos por tipologia: sinal, parcelas obra, balões anuais, financiamento Price pós-obra
+- ✅ Fatores de preço progressivo por mês (multiplicador sobre VGV da venda)
+- ✅ Receita NOMINAL separada de receita FINANCEIRA (juros)
 - ✅ BDI + contingência multiplicativos
 - ✅ Comissão (sobre venda / sobre recebimento / misto)
 - ✅ Permuta física e financeira
 - ✅ Impostos (lucro presumido / lucro real, regime caixa / competência)
-- ✅ Indicadores: VPL, TIR, payback simples, payback descontado, exposição máxima
+- ✅ Indicadores: VPL, TIR, payback simples e descontado, exposição máxima
 
-#### Interface — Módulos de entrada (1–5, 7, 9)
+### Interface — Módulos de entrada
 
 **Módulo 0 — Visão Geral** (`aba0_visao_geral.py`)
 - KPIs em grid 4×2 (VPL, TIR, Payback, Exposição, VGV, Margem, Resultado, Custo Total)
 - Card "Saúde do modelo" com checks de pendências
 - Linha do tempo em 4 trilhas horizontais (Pré-obra / Obras / Vendas / Repasse)
-- **D3**: Estimativas pré-cálculo quando resultado ainda não existe (4 cards: VGV est., Obras est., Terreno, Margem Bruta est.) com banner amarelo de aviso
+- Estimativas pré-cálculo (D3) com banner de aviso
 
 **Módulo 1 — Dados do Empreendimento** (`aba1_terreno.py`)
-- Identificação: nome, cidade (autocomplete cidades BR — A8), UF
-- Quadro de áreas: gleba, sistema viário, verde, institucional, APP, lotes
-- **A3**: Validação inline de sobre-utilização da área de lotes
-- **A4**: Validação inline de sequência de datas (sem retroceder)
-- **B6**: Hint inline de área sem tipologia atribuída
-- Tipologias de lote: tabela editável com quantidade, área, modo de preço (R$/m² ou R$/lote), valor
-- **A1**: Barra de progresso HTML mostrando área total das tipologias vs área de lotes
-- **E5**: Seção "📍 Localização no mapa (opcional)": campo URL Google Maps com extração automática de coordenadas (regex), inputs manuais de lat/lon como fallback, embed OpenStreetMap (sem API key)
+- Identificação: nome, cidade (autocomplete cidades BR), UF
+- Quadro de áreas: gleba, viário, verde, institucional, APP, lotes
+- Tipologias de lote: quantidade, área, modo de preço (R$/m² ou R$/lote), valor
+- Barra de progresso de área (A1), validação de datas (A4), mapa OpenStreetMap (E5)
 
 **Módulo 9 — Terreno** (`aba_terreno.py`)
-- Aquisição do terreno separada da aba de receitas
-- Suporte a compra à vista, financiamento, permuta física + financeira
+- Aquisição: à vista, parcelada, permuta física + financeira
+- Financiamento do terreno com controle de caixa mínimo
 
-**Módulo 2 — Receitas (VGV)** (`aba2_receitas.py`)
-- Aquisição do terreno com permuta financeira embutida
-- Fluxos de recebíveis em expanders (sinal, parcelas obra, balões, financiamento) com indicador de soma (**A6**)
-- **B4**: Gerador de Curva S na seção de curva de vendas
-- **A9**: Mini sparkline da curva de vendas
-- **A10**: Indicador de "alterações não salvas" na curva de vendas
-- Curva de vendas mensal: atalhos por intervalos + seleção de fluxo por mês
-- Tooltips de benchmark nos juros: parcelas obra 0,3–0,8% a.m., financiamento 0,6–1,0% a.m. (**D6**)
+**Módulo 2 — Receitas (VGV)** (`aba2_receitas.py`)  
+- **Design atual (v0.8.0)**: um expander por tipologia com 2 tabs:
+  - **💳 Fluxo de Recebíveis**: sinal, parcelas obra, balões, financiamento (soma 100%)
+  - **📈 Curva de Vendas**: cenários pré-configurados + atalhos por faixa + tabela manual
+- Preço progressivo global (fases com multiplicador de preço)
+- Outras receitas (aportes, receitas financeiras, venda de ativo)
 
 **Módulo 3 — Despesas de Obras** (`aba3_obras.py`)
-- Modo resumido (R$/m² + distribuição mensal) ou detalhado (etapas com distribuição mensal)
-- Cada etapa: ferramenta de intervalos + gráfico Plotly de distribuição (barras azuis, fases Obras/Vendas em vrect, marcos como linhas tracejadas)
-- Tooltips de benchmark: BDI 15–25%, contingência 5–10% (**D6**)
-- **B1**: Cards de benchmark de custo (R$/m², R$/lote) com comparação ao mercado
+- Modo resumido (R$/m²) ou detalhado (etapas com distribuição mensal)
+- Gráfico Plotly: barras + fases Obras/Vendas + marcos tracejados
+- Benchmarks BDI 15–25%, contingência 5–10%
 
 **Módulo 4 — Despesas de Incorporação** (`aba4_desenvolvimento.py`)
-- Despesas em expanders por item; categorias: Projetos, Licenciamento, Marketing, Outros
-- Cada despesa: nome, categoria, valor (**R$ fixo** ou **% do VGV bruto** — toggle radio com cálculo automático)
-- Atalhos contextuais por categoria (sugestões de curva vinculadas aos marcos do projeto)
-- Ferramenta de intervalos + gráfico Plotly de distribuição (mesmo visual da Aba 3)
-- **B3**: Resumo consolidado no topo: 5 cards por categoria + mini gráfico de desembolso mensal total
-- Administração: % sobre receita mensal (calculado no fluxo)
-- Filtro "mostrar só meses preenchidos"
-- Pré-população automática com 9 despesas típicas de loteamento, curvas vinculadas aos marcos reais
+- Despesas por categoria: Projetos, Licenciamento, Marketing, Outros
+- Valor fixo ou % do VGV bruto; atalhos contextuais por categoria
+- Administração: % sobre receita mensal
 
 **Módulo 5 — Impostos e Comissão** (`aba5_impostos.py`)
-- Regime tributário: lucro presumido / lucro real
-- Regime de apuração: caixa / competência
-- ITBI, registro, outras taxas
-- Comissão de venda: % sobre venda ou sobre recebimento ou misto
+- Regime tributário: lucro presumido / lucro real; apuração caixa / competência
+- ITBI, registro, comissão de venda
 
 **Módulo 7 — Fluxo de Caixa** (`aba7_fluxo.py`)
-- TMA (Taxa Mínima de Atratividade) com auto-save
-- Indicadores rápidos pós-cálculo: VPL, TIR, Payback, Exposição
-- **A7**: Slider de período na tabela do fluxo mensal
+- TMA com auto-save; indicadores rápidos pós-cálculo; tabela mensal com slider de período
 
-#### Interface — Módulos analíticos (6, 8, 10, 11, 12)
+### Interface — Módulos analíticos
 
-**Módulo 6 — Resultado Estático** (`aba6_resultado.py`)
-- DRE (Demonstrativo de Resultado) completa
-- Receitas: VGV bruto, permuta física (dedução), VGV vendável, receita nominal, receita de juros, receita total
-- Saídas: terreno, obras (direto + BDI + contingência), despesas por categoria, comissão, impostos
-- Resultado bruto e líquido; margens sobre VGV; composição percentual de cada custo
-- Comparativo resultado nominal vs VPL
-- Tabela de simulação de 1 lote (price por lote/mês)
+**Módulo 6 — Resultado Estático** (`aba6_resultado.py`) — DRE completa, margens, composição de custos
 
-**Módulo 8 — Dashboard** (`aba8_dashboard.py`)
-- Gráfico de fluxo de caixa mensal (entradas vs saídas vs saldo acumulado) — Plotly
-- Gráfico de exposição ao longo do tempo
-- Gráfico de pizza: composição das saídas
-- Gráfico de barras: receitas por origem (sinal, parcelas, balões, financiamento)
-- Indicadores principais em destaque
+**Módulo 8 — Dashboard** (`aba8_dashboard.py`) — Gráficos Plotly: fluxo mensal, exposição, pizza de custos, receitas por origem
 
-**Módulo 10 — Ferramentas** (`aba_ferramentas.py`)
-- **C1 — Análise de Sensibilidade**: tornado chart mostrando impacto de ±N% em cada variável (VGV, custo obras, TMA, comissão, terreno) sobre a TIR
-- **C3 — Solver Preço Mínimo**: dado TIR alvo, calcula multiplicador de preço mínimo que viabiliza o projeto (bisseção)
-- **C7 — Benchmarks de Mercado**: tabela com faixas de referência de mercado + posição atual do projeto em cada indicador
-- **C9 — Solver Terreno Máximo**: dado TIR alvo, calcula valor máximo a pagar pelo terreno
-- **C10 — Faseamento**: simulador de 2 fases (divide o projeto em Fase 1 e Fase 2 com datas e VGV próprios)
+**Módulo 10 — Ferramentas** (`aba_ferramentas.py`) — Sensibilidade (tornado), Solver Preço, Solver Terreno, Faseamento, Benchmarks
 
-**Módulo 11 — Cenários e Monte Carlo** (`aba_cenarios.py`)
-- **C2 — Comparativo de Cenários**: salva snapshots nomeados do projeto calculado e compara em tabela lado a lado (VGV, custo, TIR, VPL, margem, exposição)
-- **C4 — Monte Carlo**: distribui TIR em N simulações variando parâmetros com distribuição normal; histograma de resultados; percentis P10/P50/P90
+**Módulo 11 — Cenários** (`aba_cenarios.py`) — Comparativo de snapshots; Monte Carlo (P10/P50/P90)
 
-**Módulo 12 — Gestão de Projetos** (`aba_projetos.py`)
-- **C8**: Biblioteca de projetos salvos; listar, abrir, criar, duplicar, excluir projetos
-- Cards com resumo de cada projeto (VGV, TIR, margem, data)
-- Integração com `json_io.py` para persistência
+**Módulo 12 — Projetos** (`aba_projetos.py`) — Biblioteca de projetos: listar, abrir, criar, duplicar, excluir
 
-#### Interface — Sidebar e navegação
+### Exportações
+- **Excel** (9 abas): Dashboard, Terreno, Receitas (por tipologia), Obras, Desenvolvimento, Impostos, Fluxo de Caixa, Verificação de Receitas, Simulação de 1 Lote
+- **HTML**: relatório self-contained para impressão como PDF
 
-- **Navegação vertical por módulos** (13 módulos: 0–9 entrada/resultado, 10–12 ferramentas)
-- **Status visual** ✅/⚠️/❌ em cada módulo conforme pendências
-- **Resumo em tempo real** no rodapé (VGV, custo total, margem bruta)
-- **Header com breadcrumb**: Projetos › Nome › Versão › Módulo + "💾 Salvo automaticamente"
-- **D1 — Auto-calcular**: toggle que recalcula automaticamente quando o projeto muda
-- **D2 — Cache hash MD5**: skip do recálculo se nada mudou (hash MD5 do JSON do projeto)
-- **D7 — Ctrl+Enter → Calcular**: JS injection em `app.py` (height=0) detecta atalho e clica no botão
-- **D8 — Modo Apresentação**: botão "📋 Apresentação" esconde a sidebar via CSS, exibe Aba 0 em tela cheia com botão "✕ Sair"
-- **C14 — Histórico de versões**: auto-snapshot após cada cálculo; expander na sidebar mostra últimas N versões com diff de TIR/VPL
+### Testes
+- `auto_teste.py`: **7 testes matemáticos** (Price, curva S, NPV, IRR, simulação lote) — `python auto_teste.py`
+- `teste_exportadores.py`: **140 testes de integração** (Excel + HTML, invariantes matemáticas, UX) — `python teste_exportadores.py`
 
-#### Exportações
-- **Excel** (5 abas): Apresentação (DRE resumida + indicadores), Resumo, Fluxo de Caixa, Indicadores, Simulação Lote
-  - **B10**: Aba "Apresentação" como primeira aba, formatada para comitê
-  - Receita nominal e financeira como colunas separadas
-- **HTML** (**C11**): `exportar_html.py` gera relatório HTML self-contained para impressão como PDF; botão na sidebar
-
-### Bugs corrigidos durante o desenvolvimento (importante referência)
+### Bugs corrigidos (referência)
 
 1. **`numpy_financial` removido** → implementação própria de NPV/IRR
-2. **`cell.font = cell.font`** quebrava `openpyxl` novo (Python 3.14)
+2. **`cell.font = cell.font`** quebrava `openpyxl` no Python 3.14
 3. **NPV com rate=-100%** → divisão por zero (limite ajustado para -99%)
-4. **DataFrames vazios sem colunas** → tabelas dinâmicas não mostravam botão "+" (corrigido criando DataFrame com schema mesmo vazio)
-5. **🔴 Bug crítico de receita perdida**: vendas após o término das obras perdiam silenciosamente o `percentual_obra` do fluxo (porque `qtd_parcelas_obra` ficava negativo). Correção: pagamento concentrado no mês da venda quando `mes_venda > mes_termino_obras`. Validado: receita nominal = VGV exato. Local: `src/engine/recebimentos.py`, função `_gerar_recebimentos_de_uma_venda`.
-6. **PowerShell path escape**: caminhos com `\a`, `\b`, `\i` eram interpretados como escape sequences — sempre usar `/` (forward slash) em `python -c "open('src/...')"`.
-
-### Testes existentes
-- `auto_teste.py`: 7 testes matemáticos (parcela Price, curva S, meses_entre, NPV, IRR, simulação 1 lote)
-- Validação de invariantes: receita nominal + financeira = total recebido (exato)
-- Validação: receita nominal = VGV vendável (exato após bug corrigido)
+4. **🔴 Bug crítico de receita perdida**: vendas pós-término de obras perdiam o `percentual_obra` silenciosamente (`qtd_parcelas_obra` negativo). Correção: pagamento concentrado no mês da venda. Local: `src/engine/recebimentos.py`, `_gerar_recebimentos_de_uma_venda`.
+5. **`fluxo_caixa.py` horizonte zerado**: `_calcular_horizonte` lia `curva_vendas` (legado vazio) ignorando `fluxos_tipologia`. Corrigido para usar `fluxos_tipologia.curva_mensal` como fonte primária.
 
 ---
 
-## 5. Próximos Passos Pendentes
+## 6. Próximos Passos Pendentes
 
-### Polimento de módulos existentes
-- Aba 6 (Resultado Estático): verificar se a DRE está cobrindo todos os cenários de permuta e comissão
-- Aba 8 (Dashboard): adicionar filtro de período nos gráficos do fluxo de caixa
-- Botão "Exportar PDF (Comitê)" na Aba 0 ainda não está conectado ao HTML export (C11)
-
-### Funcionalidades em aberto
-- Importação de dados de outras fontes (CSV, Excel)
-- Relatório de comparativo de cenários em Excel (C2 só compara na tela)
-- Filtro temporal no gráfico de fluxo de caixa (Módulo 8)
-
-### Refinamentos de UX solicitados
-- Nenhum pendente registrado até esta versão
+- Aba 6 (DRE): verificar cobertura de todos os cenários de permuta e comissão
+- Aba 8 (Dashboard): adicionar filtro de período nos gráficos
+- Botão "Exportar PDF" na Aba 0 não está conectado ao `exportar_html.py`
+- Relatório de comparativo de cenários em Excel (Módulo 11 só compara na tela)
 
 ---
 
-## 6. Convenções e Boas Práticas do Projeto
+## 7. Convenções e Boas Práticas
 
 ### Estilo de código
-- **Comentários em português** (sem acentos, ex.: `Calcular VPL` em vez de `Cálculo`)
+- **Comentários em português** (sem acentos nas variáveis: `mes_termino_obras` e não `mês`)
 - **Strings de UI em português com acentos** (`"Mês de pagamento"`)
 - **Type hints** sempre que possível (Python moderno: `list[int]`, `dict[str, float]`)
 - **Pydantic para validação**: nunca confiar em dados crus do JSON ou da interface
-- **Nomes descritivos**: `mes_termino_obras` em vez de `mto`, `percentual_estoque` em vez de `pct`
 
-### Streamlit specifics
-- **`session_state` é a fonte da verdade** durante a sessão. Carregar do projeto ao iniciar, salvar de volta após cada mudança.
-- **Auto-save** acontece no final de cada `renderizar()` da aba — comparar estado atual com o que está em `get_projeto()` e atualizar via `set_projeto()` se mudou.
-- **`st.rerun()`** apenas quando estritamente necessário (mudança estrutural na lista, ex.: adicionar/remover item) — para mudanças de valor, deixar o Streamlit re-renderizar naturalmente.
-- **`key=` único e descritivo** em todos os widgets para evitar conflitos.
+### Streamlit
+- **`session_state` é a fonte da verdade** durante a sessão
+- **Auto-save** ao final de cada `renderizar()` — comparar com `get_projeto()` e chamar `set_projeto()` se mudou
+- **`st.rerun()`** só para mudanças estruturais (adicionar/remover itens de lista)
+- **`key=` único e descritivo** em todos os widgets
 
-### Distribuição temporal (tabela_mensal.py)
-- **`tabela_mensal_distribuicao`** é **somente leitura** (gráfico Plotly). Nunca esperar edição direta dela.
-- A edição de distribuição acontece via **`atalhos_por_intervalos`**, cujo botão "▶️ Aplicar" escreve em `st.session_state[chave_resultado]`.
-- O caller deve checar `if chave_atl in st.session_state: despesa["distribuicao"] = st.session_state.pop(chave_atl)` no início do render.
+### Distribuição temporal (`tabela_mensal.py`)
+- **`tabela_mensal_distribuicao`** é **somente leitura** (gráfico Plotly)
+- Toda edição passa por **`atalhos_por_intervalos`** → escreve em `session_state[chave_resultado]`
+- Caller checa `if chave_atl in st.session_state` no início do render para consumir resultado pendente
 
 ### Gráfico de distribuição — visual padrão
-- Barras: azul (`#60A5FA`) quando > 0, escuro (`#1F2937`) quando = 0
-- Zona Obras: `rgba(234,179,8,0.08)` (amarelo transparente)
-- Zona Vendas: `rgba(34,197,94,0.05)` (verde transparente)
-- Marcos: linhas tracejadas cinza (`#6B7280`), labels cinza claro (`#9CA3AF`)
+- Barras: azul (`#60A5FA`) > 0, escuro (`#1F2937`) = 0
+- Zona Obras: `rgba(234,179,8,0.08)`, Zona Vendas: `rgba(34,197,94,0.05)`
+- Marcos: linhas tracejadas cinza (`#6B7280`), labels `#9CA3AF`
 - Background: `paper_bgcolor="#0A0E14"`, `plot_bgcolor="#131822"`, `height=200`
 
-### Linguagem do mercado imobiliário
-Usar termos que o usuário entende, não jargão técnico:
-- "Entrada" em vez de "Sinal"
-- "Parcelas durante a obra" em vez de "Parcelas pré-chaves"
-- "% do VGV destinado ao permutante" em vez de só "Permuta financeira"
-- Tooltips com práticas de mercado quando relevante
-
-### Validações
-Adicionar regras em `src/interface/validacoes.py` quando descobrir novos casos de plausibilidade. Padrão:
-- **erro**: bloqueia cálculo coerente (ex.: soma de fluxo ≠ 100%)
-- **aviso**: pode calcular, mas resultado pode ser estranho (ex.: sem despesas cadastradas)
-- **dica**: valor está fora da prática de mercado mas é tecnicamente válido (ex.: comissão > 10%)
+### Validações (`validacoes.py`)
+- **erro**: bloqueia cálculo coerente (ex.: soma fluxo ≠ 100%)
+- **aviso**: pode calcular, resultado suspeito
+- **dica**: fora da prática de mercado mas tecnicamente válido
 
 ---
 
-## 7. Onde Encontrar as Coisas
+## 8. Onde Encontrar as Coisas
 
 | Quero... | Vou em... |
 |---|---|
-| Adicionar um campo na entrada do usuário | `src/modelos/<area>.py` (Pydantic) + `src/interface/abas/aba<N>_*.py` |
+| Adicionar campo na entrada do usuário | `src/modelos/<area>.py` + `src/interface/abas/aba<N>_*.py` |
 | Mudar como um valor é calculado | `src/engine/<modulo>.py` |
-| Adicionar uma regra de validação | `src/interface/validacoes.py` |
-| Mexer no visual / cores / cards | `src/interface/tema.py` (CSS) ou `tema_componentes.py` (componentes) |
-| Adicionar uma coluna no Excel | `src/io_projeto/exportar_excel.py` |
+| Adicionar regra de validação | `src/interface/validacoes.py` |
+| Mexer no visual / cores / cards | `src/interface/tema.py` ou `tema_componentes.py` |
+| Adicionar coluna no Excel | `src/io_projeto/exportar_excel.py` |
 | Mudar o que aparece na sidebar | `src/interface/sidebar.py` |
-| Criar um novo atalho contextual de despesa | `src/interface/tabela_mensal.py`, função `atalhos_contextuais` |
-| Adicionar uma nova validação matemática | `auto_teste.py` (já tem 7, padrão é claro) |
+| Criar atalho contextual de despesa | `src/interface/tabela_mensal.py`, função `atalhos_contextuais` |
+| Adicionar validação matemática | `auto_teste.py` |
 | Mudar o relatório HTML | `src/io_projeto/exportar_html.py` |
-| Mexer nos módulos de ferramentas | `src/interface/abas/aba_ferramentas.py` (tabs: Sensibilidade, Preço Mínimo, Terreno Máximo, Faseamento, Benchmarks) |
-| Mexer nos cenários / Monte Carlo | `src/interface/abas/aba_cenarios.py` |
-| Mexer na gestão de projetos | `src/interface/abas/aba_projetos.py` |
-| Mudar o estilo do gráfico de distribuição | `src/interface/tabela_mensal.py`, função `tabela_mensal_distribuicao` |
-| Adicionar/remover marcos do projeto | `src/interface/helpers.py`, função `marcos_projeto` |
+| Módulo Ferramentas (sensibilidade, solvers) | `src/interface/abas/aba_ferramentas.py` |
+| Cenários / Monte Carlo | `src/interface/abas/aba_cenarios.py` |
+| Gestão de projetos (biblioteca) | `src/interface/abas/aba_projetos.py` |
+| Estilo do gráfico de distribuição | `src/interface/tabela_mensal.py`, `tabela_mensal_distribuicao` |
+| Marcos do projeto (datas chave) | `src/interface/helpers.py`, `marcos_projeto` |
+| Migração de JSONs antigos | `src/io_projeto/json_io.py`, `_migrar_receitas_v2` |
+| Fluxo de recebíveis por tipologia | `src/modelos/receitas.py`, `FluxoTipologia` |
 
 ---
 
-## 8. Como Eu (Claude Code) Devo Trabalhar Aqui
+## 9. Como Eu (Claude Code) Devo Trabalhar Aqui
 
 ### Antes de mudar código
 1. Ler este CLAUDE.md
 2. Ler o(s) arquivo(s) que vou modificar (e os arquivos relacionados)
 3. Se for mudança estrutural (novo modelo, novo cálculo), confirmar com o usuário antes
-4. Verificar se a mudança quebra algum teste em `auto_teste.py`
+4. Verificar se a mudança pode quebrar invariantes (receita nominal = VGV, soma fluxo = 100%)
 
 ### Depois de mudar código
 1. Rodar `python auto_teste.py` se mexi na engine
-2. Verificar sintaxe com `python -c "import ast; ast.parse(open('arquivo.py', encoding='utf-8').read())"` (usar forward slashes no caminho)
-3. Se possível, rodar a interface (`python -m streamlit run app.py`) e fazer um smoke test
-4. **Atualizar este CLAUDE.md** se introduzi conceitos novos, novos arquivos, novas decisões
+2. Verificar sintaxe: `python -c "import ast; ast.parse(open('src/arquivo.py', encoding='utf-8').read())"`
+3. Rodar `python teste_exportadores.py` se mexi em exportação ou engine
+4. **Atualizar este CLAUDE.md** se introduzi conceitos novos, novos arquivos ou novas decisões
 
 ### Princípios de execução
-- **Conservar o que funciona**: o sistema tem 7 testes matemáticos passando. Não quebrar invariantes (receita nominal = VGV, soma de fluxos = 100%, etc.).
+- **Conservar o que funciona**: 7 testes matemáticos + 140 de integração passando. Não quebrar invariantes.
 - **Auto-save é sagrado**: nenhuma mudança pode reintroduzir botões "Salvar Aba".
 - **Linguagem imobiliária**: ao adicionar labels/tooltips, usar vocabulário que o Arthur entende.
-- **Defensivo na interface**: erros de validação não devem quebrar a tela, devem aparecer no painel de pendências.
-- **Tema escuro profissional é a referência**: novos componentes devem usar as cores definidas em `tema.py` (`var(--bg-card)`, `var(--text-primary)`, etc.).
-- **Plotly para gráficos**: usar a mesma paleta de cores e configuração de layout já definida em `tabela_mensal.py` e `aba4_desenvolvimento.py` como referência.
+- **Defensivo na interface**: erros de validação não devem quebrar a tela.
+- **Plotly para gráficos**: usar a paleta e configuração de `tabela_mensal.py` como referência.
 
 ### O que NÃO fazer
 - ❌ Não usar `numpy_financial` (incompatível com Python 3.14)
-- ❌ Não fazer cálculo dentro de arquivos da interface (`src/interface/`) — sempre delegar pra `src/engine/`
-- ❌ Não usar `streamlit` como se fosse `streamlit run` (sempre `python -m streamlit run`)
-- ❌ Não criar arquivos JSON ou XLSX no diretório raiz — usar `tempfile.gettempdir()` ou pedir ao usuário
-- ❌ Não acentuar nomes de variáveis Python (manter ASCII)
-- ❌ Não introduzir dependências novas sem avisar (o usuário não conhece pip e a instalação é manual)
-- ❌ Não tornar `tabela_mensal_distribuicao` editável — ela é read-only por design; toda edição passa por `atalhos_por_intervalos`
+- ❌ Não calcular dentro da interface — sempre delegar para `src/engine/`
+- ❌ Não usar `streamlit run` (sempre `python -m streamlit run`)
+- ❌ Não criar arquivos JSON/XLSX no diretório raiz — usar `tempfile.gettempdir()`
+- ❌ Não acentuar nomes de variáveis Python
+- ❌ Não introduzir dependências novas sem avisar
+- ❌ Não tornar `tabela_mensal_distribuicao` editável — é read-only por design
 
 ---
 
-## 9. Histórico de Versões
+## 10. Histórico de Versões
 
-- **v0.7.0** (atual — 2025-05): Refatoração da distribuição temporal para gráfico Plotly consultivo; % do VGV nas despesas de incorporação; remoção da linha do tempo de todas as abas; consolidação dos blocos A–E implementados
-- **v0.6.5**: Bloco E5 (Localização no mapa com OpenStreetMap); Bloco D completo (D1 auto-calc, D2 hash cache, D3 estimativas pré-cálculo, D6 tooltips benchmark, D7 Ctrl+Enter, D8 Modo Apresentação)
-- **v0.6.0**: Blocos A (UX), B (Funcional), C (Avançado) implementados; redesign visual completo; novos módulos 9–12 (Terreno, Ferramentas, Cenários, Projetos); exportação HTML
-- **v0.5.0**: Melhorias de UX (auto-save, validações de plausibilidade, status visual nas abas, painel de pendências, Aba 0, atalhos contextuais, filtro de meses preenchidos, linguagem imobiliária)
-- **v0.4.0**: Tabela mensal como input principal de despesas/etapas/curva de vendas. Reorganização (Aquisição do Terreno → Aba 2; TMA → Aba 7).
-- **v0.3.0**: Abas 2-5 funcionais via interface (sem precisar mexer em JSON)
-- **v0.2.0**: Aba 1 (Terreno) com auto-save funcional + sidebar com Novo/Abrir/Salvar/Calcular/Exportar
-- **v0.1.0**: Engine + relatório Excel funcionando via CLI/JSON
+- **v0.8.0** (atual — 2026-05): Redesign completo da Aba 2 — `FluxoTipologia` por tipologia (fluxo + curva de vendas + fatores de preço unificados). Migração automática de JSONs antigos. 140 testes de integração. Limpeza de arquivos de documentação estática.
+- **v0.7.0**: Refatoração da distribuição temporal para gráfico Plotly consultivo; % do VGV nas despesas; blocos A–E implementados
+- **v0.6.5**: Localização no mapa (OpenStreetMap); Auto-calc, hash cache, Modo Apresentação
+- **v0.6.0**: Redesign visual completo; módulos 9–12; exportação HTML
+- **v0.5.0**: Auto-save, validações de plausibilidade, painel de pendências, Aba 0
+- **v0.4.0**: Tabela mensal como input principal; Aquisição do Terreno separada; TMA na Aba 7
+- **v0.3.0**: Abas 2–5 funcionais via interface
+- **v0.2.0**: Aba 1 com auto-save + sidebar completa
+- **v0.1.0**: Engine + Excel via CLI/JSON
 
 ---
 
-## 10. Contato e Contexto
+## 11. Contato e Contexto
 
-- **Projeto desenvolvido com**: Claude Code (VS Code) em pair programming com Arthur
-- **Versão atual**: v0.7.0 — sistema completo com todas as funcionalidades de entrada, análise e ferramentas avançadas
-- **Próxima fase**: definir com Arthur quais refinamentos ou funcionalidades novas priorizar
+- **Desenvolvido com**: Claude Code (VS Code) em pair programming com Arthur
+- **Versão atual**: v0.8.0 — sistema completo com arquitetura FluxoTipologia

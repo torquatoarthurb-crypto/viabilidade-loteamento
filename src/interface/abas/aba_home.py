@@ -467,11 +467,11 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
         f'<div class="proj-card">'
         f'{status_badge}'
         f'<div class="proj-nome">{nome}</div>'
-        f'<div class="proj-local">📍 {local}</div>'
+        f'<div class="proj-local">{local}</div>'
         f'<div class="proj-vgv">{vgv_str}</div>'
         f'<div class="proj-lotes">{lotes_str}</div>'
         f'{kpis_html}'
-        f'<div class="proj-data">💾 {proj["ultima_modificacao"]}'
+        f'<div class="proj-data">{proj["ultima_modificacao"]}'
         f'{(" · Calc.: " + calc_info) if calc_info else ""}'
         f'</div>'
         f'</div>',
@@ -484,7 +484,7 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
         if st.button(
             "Abrir →",
             key=f"btn_abrir_{idx}",
-            use_container_width=True,
+            width="stretch",
             type="primary",
         ):
             _abrir_projeto(proj["caminho"])
@@ -492,7 +492,7 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
         if st.button(
             "Duplicar",
             key=f"btn_dup_{idx}",
-            use_container_width=True,
+            width="stretch",
             help="Cria uma cópia deste projeto",
         ):
             novo_nome = duplicar_projeto_usuario(email, nome)
@@ -503,15 +503,15 @@ def _renderizar_card(proj: dict, email: str, idx: int) -> None:
                 st.error("Não foi possível duplicar.")
     with col_c:
         if st.button(
-            "🗑",
+            "×",
             key=f"btn_del_{idx}",
-            use_container_width=True,
+            width="stretch",
             help="Excluir projeto",
         ):
             st.session_state[f"_confirmar_del_{idx}"] = True
 
     if st.session_state.get(f"_confirmar_del_{idx}"):
-        st.warning(f"⚠ Excluir **{nome}**? Esta ação não pode ser desfeita.")
+        st.warning(f"Excluir **{nome}**? Esta ação não pode ser desfeita.")
         senha_del = st.text_input(
             "Confirme sua senha para continuar",
             type="password",
@@ -567,7 +567,7 @@ def _renderizar_empty_state(email: str) -> None:
         if st.button(
             "Carregar demo →",
             key="home_demo",
-            use_container_width=True,
+            width="stretch",
             type="primary",
         ):
             _carregar_demo(email)
@@ -586,7 +586,7 @@ def _renderizar_empty_state(email: str) -> None:
         if st.button(
             "Novo projeto →",
             key="home_novo_empty",
-            use_container_width=True,
+            width="stretch",
         ):
             _novo_projeto()
 
@@ -616,8 +616,8 @@ def renderizar() -> None:
     col_novo, col_import, col_sair = st.columns([2, 2, 1])
     with col_novo:
         if st.button(
-            "➕ Novo Projeto",
-            use_container_width=True,
+            "+ Novo Projeto",
+            width="stretch",
             type="primary",
             key="home_novo",
         ):
@@ -645,14 +645,14 @@ def renderizar() -> None:
                 st.error(f"Erro ao importar: {e}")
         else:
             st.button(
-                "📂 Restaurar projeto",
-                use_container_width=True,
+                "Restaurar projeto",
+                width="stretch",
                 key="home_btn_upload_label",
                 disabled=True,
                 help="Clique acima para selecionar um arquivo .json",
             )
     with col_sair:
-        if st.button("Sair", key="home_sair", use_container_width=True):
+        if st.button("Sair", key="home_sair", width="stretch"):
             limpar_sessao()
             st.session_state.pop("usuario_logado", None)
             st.session_state.pop("projeto_path_atual", None)

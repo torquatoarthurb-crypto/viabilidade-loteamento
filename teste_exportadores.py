@@ -618,12 +618,12 @@ def suite_reajustes(projeto_base) -> None:
 # ===========================================================================
 
 def suite_preco_progressivo(projeto_base) -> None:
-    secao("SUITE 10 — Preço Progressivo (fator_preco)")
+    secao("SUITE 10 — Preço Progressivo (fatores_preco por tipologia)")
 
     try:
-        from src.modelos.receitas import FaixaCurvaVendas, Aba2Receitas
+        from src.modelos.receitas import FluxoTipologia, Aba2Receitas
     except Exception as e:
-        check("Import FaixaCurvaVendas OK", False, str(e))
+        check("Import FluxoTipologia OK", False, str(e))
         return
 
     r_base = calcular_fluxo_caixa(projeto_base)
@@ -635,59 +635,53 @@ def suite_preco_progressivo(projeto_base) -> None:
     check("Campo 'vgv_efetivo_vendavel' no resumo",
           vgv_efetivo_base is not None)
 
-    # Sem fator_preco customizado, vgv_efetivo ~= vgv_vendavel
+    # Sem fatores_preco customizados, vgv_efetivo ~= vgv_vendavel
     if vgv_efetivo_base is not None:
-        check("Sem fator_preco: vgv_efetivo ~= vgv_vendavel",
+        check("Sem fatores_preco: vgv_efetivo ~= vgv_vendavel",
               abs(vgv_efetivo_base - vgv_vendavel_base) / max(vgv_vendavel_base, 1) < 0.05,
               f"efetivo={vgv_efetivo_base:,.0f}  vendavel={vgv_vendavel_base:,.0f}")
 
-    # Construir projeto com fator_preco=1.10 na última faixa (10% mais caro)
+    # Construir projeto com fatores_preco=1.10 no último mês de cada tipologia
     try:
-        curva_orig = projeto_base.receitas.curva_vendas
-        if len(curva_orig) < 2:
-            check("Curva de vendas tem >= 2 faixas", False,
-                  "não é possível testar fator_preco com menos de 2 faixas")
+        fts_orig = projeto_base.receitas.fluxos_tipologia
+        check("fluxos_tipologia preenchido no exemplo", len(fts_orig) >= 1)
+        if not fts_orig:
             return
 
-        # Clonar a última faixa com fator 1.10
-        ultima = curva_orig[-1]
-        nova_ultima = FaixaCurvaVendas(
-            mes_inicio=ultima.mes_inicio,
-            mes_fim=ultima.mes_fim,
-            percentual_estoque=ultima.percentual_estoque,
-            fluxo_recebiveis=ultima.fluxo_recebiveis,
-            fator_preco=1.10,
-        )
-        nova_curva = list(curva_orig[:-1]) + [nova_ultima]
-        novas_receitas = projeto_base.receitas.model_copy(update={"curva_vendas": nova_curva})
+        # Aplicar fator 1.10 a todos os meses de cada tipologia
+        novos_fts = []
+        for ft in fts_orig:
+            fatores = {m: 1.10 for m in ft.curva_mensal.keys()}
+            novos_fts.append(ft.model_copy(update={"fatores_preco": fatores}))
+
+        novas_receitas = projeto_base.receitas.model_copy(update={"fluxos_tipologia": novos_fts})
         projeto_pp = projeto_base.model_copy(update={"receitas": novas_receitas})
 
         r_pp = calcular_fluxo_caixa(projeto_pp)
         receita_pp = r_pp.resumo.get("receita_nominal_venda", 0)
         vgv_ef_pp  = r_pp.resumo.get("vgv_efetivo_vendavel",  0)
 
-        check("Com fator_preco=1.10: receita nominal > base",
-              receita_pp >= receita_base - 1.0,
+        check("Com fatores_preco=1.10: vgv_efetivo > base",
+              vgv_ef_pp > vgv_efetivo_base - 1.0,
+              f"pp={vgv_ef_pp:,.0f}  base={vgv_efetivo_base:,.0f}")
+        check("Com fatores_preco=1.10: receita nominal aumentou ~10%",
+              receita_pp > receita_base * 1.05,
               f"pp={receita_pp:,.0f}  base={receita_base:,.0f}")
-        check("vgv_efetivo_vendavel > vgv_vendavel com fator_preco > 1",
-              vgv_ef_pp >= vgv_vendavel_base - 1.0,
-              f"ef={vgv_ef_pp:,.0f}  base={vgv_vendavel_base:,.0f}")
 
-        # Verificar que o Excel com fator_preco mostra o fator na aba Receitas
+        # Verificar que o Excel com novo formato mostra curva por tipologia
         tmp = Path(tempfile.mkdtemp()) / "teste_pp.xlsx"
         exportar_para_excel(projeto_pp, r_pp, tmp)
-        wb = load_workbook(tmp)
-        ws_r = wb["Receitas"]
-        # Procurar "Fator" na aba Receitas
-        fator_presente = any(
-            "fator" in str(ws_r.cell(row, col).value or "").lower()
+        wb_pp = load_workbook(tmp)
+        ws_r = wb_pp["Receitas"]
+        soma_curva_presente = any(
+            "soma curva" in str(ws_r.cell(row, col).value or "").lower()
             for row in range(1, ws_r.max_row + 1)
             for col in range(1, min(ws_r.max_column + 1, 10))
         )
-        check("Fator de preço mostrado na aba Receitas do Excel",
-              fator_presente, "célula com 'Fator' não encontrada")
+        check("Curva por tipologia mostrada na aba Receitas do Excel",
+              soma_curva_presente, "célula 'Soma curva de vendas' não encontrada")
 
-        # Verificar invariante: principal == vgv_efetivo (com fator)
+        # Invariante: receita_nominal ~= vgv_efetivo (com fator)
         dif_inv = abs(r_pp.resumo.get("vgv_efetivo_vendavel", 0) -
                       r_pp.resumo.get("receita_nominal_venda", 0))
         check("Invariante preço progressivo: receita_nominal ~= vgv_efetivo",
@@ -695,7 +689,7 @@ def suite_preco_progressivo(projeto_base) -> None:
               f"dif={dif_inv:,.2f}")
 
     except Exception as e:
-        check("Teste fator_preco sem erro", False, str(e))
+        check("Teste fatores_preco sem erro", False, str(e))
         traceback.print_exc()
 
 

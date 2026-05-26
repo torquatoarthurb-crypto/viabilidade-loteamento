@@ -95,7 +95,7 @@ def renderizar() -> None:
     # SECAO 1 — OBRAS (INCC)
     # ================================================================
     with st.container(border=True):
-        st.markdown("#### 🏗️ Custo de obras — INCC")
+        st.markdown("#### Custo de obras — INCC")
         st.caption(
             "O custo inserido na Aba de Obras está em preços atuais (constantes). "
             "Com INCC ativo, cada mês de desembolso é multiplicado por `(1 + INCC_m)^mês`, "
@@ -126,7 +126,7 @@ def renderizar() -> None:
             base = resultado.resumo.get("custo_obras_base_constante", 0)
             if var > 0 and base > 0:
                 st.info(
-                    f"📈 Com INCC de {incc_pct:.1f}% a.a., o custo nominal das obras sobe "
+                    f"Com INCC de {incc_pct:.1f}% a.a., o custo nominal das obras sobe "
                     f"**{formatar_brl(var)}** acima do orçamento base "
                     f"({var / base * 100:.1f}% a mais)."
                 )
@@ -135,7 +135,7 @@ def renderizar() -> None:
     # SECAO 2 — PARCELAS DO COMPRADOR
     # ================================================================
     with st.container(border=True):
-        st.markdown("#### 📄 Parcelas durante a obra — correção do comprador")
+        st.markdown("#### Parcelas durante a obra — correção do comprador")
         st.caption(
             "As parcelas mensais pagas pelo comprador durante a obra são corrigidas pelo "
             "índice escolhido. Cada parcela é multiplicada por `(1 + índice_m)^k` onde k "
@@ -191,7 +191,7 @@ def renderizar() -> None:
             if corr_total > 0:
                 vgv_v = resultado.resumo.get("vgv_vendavel", 1)
                 st.success(
-                    f"📈 Receita adicional de correção: **{formatar_brl(corr_total)}** "
+                    f"Receita adicional de correção: **{formatar_brl(corr_total)}** "
                     f"({corr_total / vgv_v * 100:.1f}% do VGV vendável)."
                 )
 
@@ -199,7 +199,7 @@ def renderizar() -> None:
     # SECAO 3 — TERRENO PARCELADO
     # ================================================================
     with st.container(border=True):
-        st.markdown("#### 🏡 Terreno parcelado — correção do custo")
+        st.markdown("#### Terreno parcelado — correção do custo")
         st.caption(
             "Se o terreno foi adquirido de forma parcelada, as parcelas podem ser "
             "corrigidas por um índice. Aumenta o custo total do terreno em termos nominais."
@@ -277,7 +277,7 @@ def renderizar() -> None:
     # ================================================================
     st.markdown("---")
     with st.container(border=True):
-        st.markdown("#### 📊 Impacto Líquido dos Reajustes")
+        st.markdown("#### Impacto Líquido dos Reajustes")
 
         r_sum = resultado.resumo
         ind   = resultado.indicadores
@@ -319,12 +319,12 @@ def renderizar() -> None:
         # Resumo textual
         if efeito_liquido >= 0:
             st.success(
-                f"✅ Os reajustes beneficiam o projeto em **{formatar_brl(efeito_liquido)}** "
+                f"Os reajustes beneficiam o projeto em **{formatar_brl(efeito_liquido)}** "
                 f"— a correção das parcelas supera o encarecimento das obras."
             )
         else:
             st.warning(
-                f"⚠️ Os reajustes reduzem o resultado em **{formatar_brl(abs(efeito_liquido))}** "
+                f"Os reajustes reduzem o resultado em **{formatar_brl(abs(efeito_liquido))}** "
                 f"— o INCC das obras supera a correção recebida nas parcelas. "
                 f"Considere repassar mais correção ao comprador ou reduzir o prazo de obra."
             )

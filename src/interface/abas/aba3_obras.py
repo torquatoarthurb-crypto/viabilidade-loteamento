@@ -137,13 +137,19 @@ def renderizar() -> None:
     horizonte = horizonte_visual_projeto(projeto)
     marcos = marcos_projeto(projeto)
 
-    # Areas de referencia
-    st.info(
-        f"**Áreas de referência (Identificação):**  \n"
-        f"Sistema viario = {formatar_num(areas.area_sistema_viario_m2)} m² | "
-        f"Area de lotes = {formatar_num(areas.area_lotes_m2)} m² | "
-        f"Gleba = {formatar_num(areas.area_gleba_m2)} m²"
+    # Areas de referencia — faixa compacta com 3 metricas
+    st.markdown(
+        '<div style="margin:0 0 8px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
+        'text-transform:uppercase;color:var(--stone-500);">Áreas de referência</div>',
+        unsafe_allow_html=True,
     )
+    _ref_c1, _ref_c2, _ref_c3 = st.columns(3)
+    with _ref_c1:
+        st.metric("Sistema viário", f"{formatar_num(areas.area_sistema_viario_m2)} m²")
+    with _ref_c2:
+        st.metric("Área de lotes", f"{formatar_num(areas.area_lotes_m2)} m²")
+    with _ref_c3:
+        st.metric("Gleba total", f"{formatar_num(areas.area_gleba_m2)} m²")
 
     # ============================================================
     # MODO DO ORCAMENTO
@@ -201,7 +207,11 @@ def renderizar() -> None:
             st.metric("Custo direto estimado", formatar_brl(valor_estimado))
 
         # Atalhos + tabela mensal para o resumido
-        st.markdown("**Distribuicao mensal do desembolso:**")
+        st.markdown(
+            '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+            'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição mensal do desembolso</div>',
+            unsafe_allow_html=True,
+        )
         st.caption("Defina intervalos com % e clique Aplicar.")
 
         # Ler/inicializar distribuicao do resumido (estado em sessao)
@@ -221,7 +231,7 @@ def renderizar() -> None:
             salvar_fluxo = True
 
         # ---- Template de curva para o resumido ----
-        with st.expander("📋 Preencher com template de curva"):
+        with st.expander("Preencher com template de curva"):
             _tmpl_dur_opcoes = {
                 "18 meses — Curva S (basico)":    18,
                 "24 meses — Curva S (medio)":     24,
@@ -269,7 +279,7 @@ def renderizar() -> None:
                 "Aplicar curva",
                 key="aba3_tmpl_res_aplicar",
                 type="primary",
-                use_container_width=False,
+                width="content",
                 help="Preenche a tabela mensal com a curva S gerada.",
             ):
                 st.session_state[chave_resumido] = _gerar_distribuicao_curva_s(
@@ -290,7 +300,7 @@ def renderizar() -> None:
 
         col_sv, _ = st.columns([1, 3])
         with col_sv:
-            if st.button("💾 Salvar fluxo", key="aba3_res_salvar", use_container_width=True):
+            if st.button("Salvar fluxo", key="aba3_res_salvar", width="stretch", icon=":material/save:"):
                 salvar_fluxo = True
 
         valor_resumido_inputs = {
@@ -313,7 +323,7 @@ def renderizar() -> None:
         etapas_estado = st.session_state[CHAVE_ETAPAS]
 
         # ---- Templates pre-configurados ----
-        with st.expander("📋 Carregar template de etapas", expanded=not etapas_estado):
+        with st.expander("Carregar template de etapas", expanded=not etapas_estado):
             m_ini_obras = next(
                 (k for k, v in marcos.items() if "Ini" in v and "Obra" in v), 0
             )
@@ -355,7 +365,7 @@ def renderizar() -> None:
                 cols[2].caption(f"`{barra}` M{m_abs_ini}–M{m_abs_fim}")
 
             st.caption(
-                "⚠️ Os percentuais de custo são indicativos. "
+                "Os percentuais de custo são indicativos. "
                 "Após aplicar, ajuste os valores (R$) de cada etapa conforme seu orçamento."
             )
 
@@ -365,7 +375,7 @@ def renderizar() -> None:
                     "Substituir etapas",
                     key="aba3_tmpl_substituir",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                     help="Apaga as etapas existentes e carrega o template selecionado.",
                 ):
                     novas = []
@@ -383,7 +393,7 @@ def renderizar() -> None:
                 if st.button(
                     "Adicionar ao projeto",
                     key="aba3_tmpl_adicionar",
-                    use_container_width=True,
+                    width="stretch",
                     help="Mantém etapas existentes e acrescenta as do template.",
                 ):
                     for s in etapas_tmpl:
@@ -399,7 +409,7 @@ def renderizar() -> None:
         st.markdown("---")
         col_add, _ = st.columns([1, 3])
         with col_add:
-            if st.button("➕ Adicionar etapa", use_container_width=True):
+            if st.button("Adicionar etapa", width="stretch", icon=":material/add:"):
                 _marcos_proj = marcos_projeto(projeto)
                 _m_ini = next(
                     (k for k, v in _marcos_proj.items() if v == "Ini.Obras"), 0
@@ -415,7 +425,7 @@ def renderizar() -> None:
                 st.rerun()
 
         if not etapas_estado:
-            st.info("Nenhuma etapa cadastrada. Clique em '➕ Adicionar etapa' para comecar.")
+            st.info("Nenhuma etapa cadastrada. Clique em '+ Adicionar etapa' para comecar.")
 
         indices_para_remover = []
 
@@ -425,11 +435,11 @@ def renderizar() -> None:
             soma_pct = sum(etapa.get("distribuicao", {}).values())
 
             if abs(soma_pct - 100.0) < 0.01:
-                status = "✅"
+                status = "✓"
             elif soma_pct == 0:
-                status = "⬜"
+                status = "○"
             else:
-                status = "⚠️"
+                status = "!"
 
             titulo = f"{status} **{nome_atual}** — {formatar_brl(valor_atual)}"
 
@@ -449,8 +459,8 @@ def renderizar() -> None:
                 with col3:
                     st.markdown("&nbsp;")
                     if st.button(
-                        "🗑️", key=f"etapa_{idx}_remover", use_container_width=True,
-                        help="Remover esta etapa",
+                        "Remover", key=f"etapa_{idx}_remover", width="stretch",
+                        help="Remover esta etapa", icon=":material/delete:",
                     ):
                         indices_para_remover.append(idx)
 
@@ -460,12 +470,20 @@ def renderizar() -> None:
                     etapa["distribuicao"] = st.session_state.pop(chave_atl_etapa)
                     salvar_fluxo = True
 
-                st.markdown("**Distribuicao por intervalos:**")
+                st.markdown(
+                    '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+                    'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição por intervalos</div>',
+                    unsafe_allow_html=True,
+                )
                 st.caption("Defina faixas com % e clique Aplicar.")
                 atalhos_por_intervalos(f"etapa_{idx}", horizonte, chave_atl_etapa)
 
                 # Tabela mensal
-                st.markdown("**Distribuicao mensal:**")
+                st.markdown(
+                    '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+                    'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição mensal</div>',
+                    unsafe_allow_html=True,
+                )
                 nova_distrib = tabela_mensal_distribuicao(
                     nome_unico=f"etapa_{idx}",
                     horizonte_meses=horizonte,
@@ -479,7 +497,7 @@ def renderizar() -> None:
 
                 col_sv, _ = st.columns([1, 3])
                 with col_sv:
-                    if st.button("💾 Salvar fluxo", key=f"etapa_{idx}_salvar", use_container_width=True):
+                    if st.button("Salvar fluxo", key=f"etapa_{idx}_salvar", width="stretch", icon=":material/save:"):
                         salvar_fluxo = True
 
         if indices_para_remover:
@@ -490,13 +508,20 @@ def renderizar() -> None:
         # Total
         if etapas_estado:
             total = sum(float(e.get("valor_total", 0) or 0) for e in etapas_estado)
-            st.metric("Total custo direto (sem BDI/contingencia)", formatar_brl(total))
+            st.markdown(
+                '<div style="margin:8px 0 4px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
+                'text-transform:uppercase;color:var(--stone-500);">Total das etapas</div>',
+                unsafe_allow_html=True,
+            )
+            _tc1, _tc2 = st.columns(2)
+            with _tc1:
+                st.metric("Custo direto (sem BDI/contingência)", formatar_brl(total))
 
     # ============================================================
     # BDI E CONTINGENCIA
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 📊 BDI e Contingencia")
+        st.markdown("#### BDI e Contingência")
         col1, col2 = st.columns(2)
         with col1:
             bdi = numero_brl(
@@ -539,7 +564,12 @@ def renderizar() -> None:
             _lotes = float(areas.area_lotes_m2) or 1.0
             _n_lotes = projeto.terreno.total_lotes or 1
 
-            st.markdown("##### Benchmarks de Custo (com BDI e Contingencia)")
+            st.markdown(
+                '<div style="margin:14px 0 8px;font-size:10px;font-weight:600;'
+                'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
+                'Benchmarks com BDI e Contingência</div>',
+                unsafe_allow_html=True,
+            )
             _bc1, _bc2, _bc3, _bc4 = st.columns(4)
             with _bc1:
                 st.metric("Custo total obras", formatar_brl(_custo_total_bdi))
@@ -582,10 +612,7 @@ def renderizar() -> None:
     # ============================================================
     # AUTO-SAVE (so roda quando Salvar e clicado ou BDI/contingencia mudou)
     # ============================================================
-    bdi_mudou = obras.bdi_percentual != bdi
-    contingencia_mudou = obras.contingencia_percentual != contingencia
-
-    if not (salvar_fluxo or bdi_mudou or contingencia_mudou):
+    if not salvar_fluxo:
         return
 
     try:

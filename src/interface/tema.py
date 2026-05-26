@@ -132,6 +132,15 @@ section[data-testid="stSidebar"] .stButton > button {
     font-family: 'Inter', sans-serif !important;
 }
 
+/* Alinha icone + texto a esquerda no interior dos botoes de navegacao */
+section[data-testid="stSidebar"] .stButton > button > div,
+section[data-testid="stSidebar"] .stButton > button > p,
+section[data-testid="stSidebar"] .stButton > button > span {
+    justify-content: flex-start !important;
+    text-align: left !important;
+    width: 100% !important;
+}
+
 section[data-testid="stSidebar"] .stButton > button:hover:not(:disabled) {
     background: rgba(255,255,255,0.08) !important;
     border-color: rgba(255,255,255,0.14) !important;
@@ -325,8 +334,8 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 .card {
     background: var(--bg-card);
     border: 0.5px solid var(--border);
-    border-radius: 14px;
-    padding: 22px;
+    border-radius: 12px;
+    padding: 18px;
     margin-bottom: 16px;
     box-shadow: 0 2px 12px rgba(26,25,22,0.04);
     transition: box-shadow 0.2s;
@@ -351,8 +360,8 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 .kpi-card {
     background: var(--bg-card);
     border: 0.5px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 16px;
+    border-radius: 12px;
+    padding: 12px 14px 10px;
     height: 100%;
     transition: box-shadow 0.2s;
 }
@@ -405,7 +414,7 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
 
 .kpi-valor {
     font-family: 'DM Serif Display', serif;
-    font-size: 22px;
+    font-size: 17px;
     color: var(--text-primary);
     line-height: 1.15;
 }
@@ -568,22 +577,78 @@ section[data-testid="stSidebar"] [data-testid="metric-container"] [data-testid="
    METRICAS nativas do Streamlit
    ===================================================================== */
 
+/* -----------------------------------------------------------------------
+   Campos de resultado / indice — retangulo com borda clara, fundo suave
+   Aplica-se a todos os st.metric() no conteudo principal.
+   ----------------------------------------------------------------------- */
+.block-container [data-testid="metric-container"] {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--stone-300) !important;
+    border-radius: 10px !important;
+    padding: 10px 14px 8px !important;
+    box-shadow: 0 1px 6px rgba(26,25,22,0.05) !important;
+    transition: box-shadow 0.15s !important;
+}
+
+.block-container [data-testid="metric-container"]:hover {
+    box-shadow: 0 3px 12px rgba(26,25,22,0.09) !important;
+}
+
 [data-testid="metric-container"] label {
     color: var(--stone-500) !important;
-    font-size: 11px !important;
-    font-weight: 500 !important;
-    letter-spacing: 0.06em !important;
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.10em !important;
     text-transform: uppercase !important;
 }
 
 [data-testid="metric-container"] [data-testid="stMetricValue"] {
     font-family: 'DM Serif Display', serif !important;
-    font-size: 22px !important;
+    font-size: 15px !important;
     color: var(--stone-900) !important;
+    line-height: 1.2 !important;
 }
 
 [data-testid="metric-container"] [data-testid="stMetricDelta"] {
-    font-size: 12px !important;
+    font-size: 11px !important;
+}
+
+/* Sidebar: sem borda (fundo escuro) */
+section[data-testid="stSidebar"] [data-testid="metric-container"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 4px 0 !important;
+}
+
+/* -----------------------------------------------------------------------
+   Classe utilitaria: .result-box — para valores calculados em HTML inline
+   Uso: st.markdown('<div class="result-box">65.000 m²</div>', unsafe_allow_html=True)
+   ----------------------------------------------------------------------- */
+.result-box {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--stone-300);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-family: 'DM Serif Display', serif;
+    font-size: 14px;
+    color: var(--stone-900);
+    line-height: 1.3;
+    box-shadow: 0 1px 4px rgba(26,25,22,0.04);
+}
+
+.result-box-sm {
+    display: inline-flex;
+    align-items: center;
+    background: var(--stone-50);
+    border: 0.5px solid var(--stone-300);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--stone-900);
 }
 
 /* =====================================================================

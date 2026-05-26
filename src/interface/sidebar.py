@@ -81,13 +81,13 @@ def renderizar_sidebar_acoes() -> None:
             if st.button(
                 "← Meus Projetos",
                 key="btn_voltar_home",
-                use_container_width=True,
+                width="stretch",
                 help="Voltar para a lista de projetos",
             ):
                 st.session_state["projeto_path_atual"] = None
                 st.rerun()
         with col_sair:
-            if st.button("Sair", key="btn_sair_sidebar", use_container_width=True):
+            if st.button("Sair", key="btn_sair_sidebar", width="stretch"):
                 limpar_sessao()
                 st.session_state.pop("usuario_logado", None)
                 st.session_state.pop("projeto_path_atual", None)
@@ -109,19 +109,25 @@ def renderizar_sidebar_acoes() -> None:
 
     # Botao Calcular — sempre visivel, fora do expander
     if st.sidebar.button(
-        "🧮 Calcular Viabilidade",
+        "Calcular Viabilidade",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="btn_calcular_topo",
-        help="⌨️ Ctrl+Enter",
+        help="Ctrl+Enter",
     ):
         try:
+            from .abas.aba1_terreno import sincronizar_aba1
             from .abas.aba2_receitas import sincronizar_aba2
             from .abas.aba3_obras import sincronizar_aba3
             from .abas.aba4_desenvolvimento import sincronizar_aba4
+            from .abas.aba5_impostos import sincronizar_aba5
+            from .abas.aba7_fluxo import sincronizar_aba7
+            sincronizar_aba1()
             sincronizar_aba2()
             sincronizar_aba3()
             sincronizar_aba4()
+            sincronizar_aba5()
+            sincronizar_aba7()
             projeto_atual = get_projeto()
             h = _projeto_hash(projeto_atual)
             if get_resultado() is not None and h == st.session_state.get("_hash_ultimo_calc"):
@@ -145,14 +151,14 @@ def renderizar_sidebar_acoes() -> None:
                     except Exception:
                         pass
         except Exception as e:
-            st.sidebar.error(f"⚠️ {e}")
+            st.sidebar.error(str(e))
 
     # Aviso quando sem resultado
     if get_resultado() is None:
         st.sidebar.markdown(
             '<div style="background:rgba(30,58,138,0.12);border:0.5px solid rgba(30,58,138,0.35);'
             'padding:7px 12px;margin:4px 10px;border-radius:6px;font-size:11px;'
-            'color:#93C5FD;">⚠️ Calcule para ver os resultados</div>',
+            'color:#93C5FD;">Calcule para ver os resultados</div>',
             unsafe_allow_html=True,
         )
 
@@ -176,8 +182,8 @@ def renderizar_sidebar_rodape() -> None:
         unsafe_allow_html=True,
     )
 
-    with st.sidebar.expander("⚙️ Acoes do projeto", expanded=False):
-        if st.button("🆕 Novo projeto", use_container_width=True, key="btn_novo"):
+    with st.sidebar.expander("Ações do projeto", expanded=False):
+        if st.button("+ Novo projeto", width="stretch", key="btn_novo"):
             set_projeto(projeto_novo())
             st.session_state["nome_arquivo_atual"] = None
             st.session_state["projeto_path_atual"] = "__novo__"
@@ -186,7 +192,7 @@ def renderizar_sidebar_rodape() -> None:
             st.rerun()
 
         arquivo = st.file_uploader(
-            "📂 Abrir (.json)",
+            "Abrir (.json)",
             type=["json"],
             label_visibility="visible",
             key="abrir_arquivo",
@@ -199,43 +205,44 @@ def renderizar_sidebar_rodape() -> None:
                 st.session_state["nome_arquivo_atual"] = arquivo.name
                 _limpar_estado_abas()
                 limpar_cache_inputs_brl()
-                st.success("✅ Carregado")
+                st.success("Projeto carregado")
             except Exception as e:
-                st.error(f"⚠️ Erro: {e}")
+                st.error(f"Erro ao abrir: {e}")
 
         # Salvar na pasta do usuario (principal)
         usuario = st.session_state.get("usuario_logado")
         if usuario:
             if st.button(
-                "💾 Salvar Projeto",
-                use_container_width=True,
+                "Salvar Projeto",
+                width="stretch",
                 key="btn_salvar_proj",
                 type="primary",
                 help="Salva o projeto na sua conta. Aparecerá em 'Meus Projetos'.",
+                icon=":material/save:",
             ):
                 try:
                     from ..auth import salvar_projeto_usuario
                     caminho = salvar_projeto_usuario(usuario["email"], projeto)
                     st.session_state["projeto_path_atual"] = str(caminho)
-                    st.success("✅ Projeto salvo!")
+                    st.success("Projeto salvo")
                 except Exception as e:
-                    st.error(f"⚠️ Erro ao salvar: {e}")
+                    st.error(f"Erro ao salvar: {e}")
 
         # Download JSON (secundario)
         json_str = projeto.model_dump_json(indent=2)
         st.download_button(
-            "📥 Baixar JSON",
+            "Baixar .json",
             data=json_str,
             file_name=f"{nome_padrao}.json",
             mime="application/json",
-            use_container_width=True,
+            width="stretch",
             help="Baixa o arquivo JSON no seu computador.",
         )
 
         st.markdown("---")
 
         auto_calc = st.checkbox(
-            "⚡ Auto-calcular",
+            "Auto-calcular",
             value=st.session_state.get("_auto_calc", False),
             key="cb_auto_calc",
             help="Recalcula automaticamente quando o projeto muda.",
@@ -251,35 +258,36 @@ def renderizar_sidebar_rodape() -> None:
                 exportar_para_excel(projeto, resultado, arquivo_xlsx)
                 with arquivo_xlsx.open("rb") as f:
                     st.download_button(
-                        "📊 Baixar Excel",
+                        "Baixar Excel",
                         data=f.read(),
                         file_name=arquivo_xlsx.name,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
+                        width="stretch",
                     )
             except Exception as e:
-                st.error(f"⚠️ Erro: {e}")
+                st.error(f"Erro ao exportar Excel: {e}")
 
             try:
                 html_str = gerar_relatorio_html(projeto, resultado)
                 st.download_button(
-                    "🖨️ Relatorio PDF (imprimir)",
+                    "Relatório PDF",
                     data=html_str.encode("utf-8"),
                     file_name=f"relatorio_{nome_padrao}.html",
                     mime="text/html",
-                    use_container_width=True,
+                    width="stretch",
                     help="Baixa HTML. Abra no navegador e pressione Ctrl+P para salvar como PDF.",
                 )
             except Exception as e:
-                st.error(f"⚠️ Erro no relatorio: {e}")
+                st.error(f"Erro no relatório: {e}")
 
     # D8: modo apresentacao
     if resultado is not None:
         if st.sidebar.button(
-            "📋 Apresentacao",
-            use_container_width=True,
+            "Apresentação",
+            width="stretch",
             key="btn_apresentacao",
             help="Esconde a sidebar e exibe os resultados em tela cheia",
+            icon=":material/slideshow:",
         ):
             st.session_state["modo_apresentacao"] = True
             st.rerun()
@@ -295,12 +303,18 @@ def renderizar_sidebar_rodape() -> None:
 def _check_auto_calc() -> None:
     """D1: Recalcula silenciosamente se o projeto mudou desde o ultimo calculo."""
     try:
+        from .abas.aba1_terreno import sincronizar_aba1
         from .abas.aba2_receitas import sincronizar_aba2
         from .abas.aba3_obras import sincronizar_aba3
         from .abas.aba4_desenvolvimento import sincronizar_aba4
+        from .abas.aba5_impostos import sincronizar_aba5
+        from .abas.aba7_fluxo import sincronizar_aba7
+        sincronizar_aba1()
         sincronizar_aba2()
         sincronizar_aba3()
         sincronizar_aba4()
+        sincronizar_aba5()
+        sincronizar_aba7()
         projeto = get_projeto()
         h = _projeto_hash(projeto)
         if h != st.session_state.get("_hash_ultimo_calc"):
@@ -371,7 +385,7 @@ def _renderizar_historico() -> None:
     if not historico:
         return
 
-    with st.sidebar.expander(f"📋 Historico ({len(historico)} calculos)", expanded=False):
+    with st.sidebar.expander(f"Histórico ({len(historico)} cálculos)", expanded=False):
         for i, v in enumerate(reversed(historico)):
             real_idx = len(historico) - 1 - i
             tir_str = f"{v['tir_anual'] * 100:.1f}%" if v.get("tir_anual") else "—"

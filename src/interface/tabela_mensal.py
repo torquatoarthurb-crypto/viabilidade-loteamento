@@ -44,6 +44,11 @@ def tabela_mensal_distribuicao(
     valores_iniciais = valores_iniciais or {}
     marcos = marcos or {}
 
+    # Consume pending manual edit (written by "Aplicar ajustes" button below)
+    _chave_manual = f"_tabela_manual_result_{nome_unico}"
+    if _chave_manual in st.session_state:
+        valores_iniciais = dict(st.session_state.pop(_chave_manual))
+
     try:
         import plotly.graph_objects as go
 
@@ -152,20 +157,100 @@ def tabela_mensal_distribuicao(
             n_meses = sum(1 for v in valores_iniciais.values() if v > 0)
             st.caption(f"Distribuicao: {n_meses} meses preenchidos — Soma: {soma_fb:.1f}%")
         else:
-            st.caption("📊 Use a ferramenta de intervalos acima para distribuir o desembolso por mes.")
+            st.caption("Use a ferramenta de intervalos acima para distribuir o desembolso por mês.")
 
     if mostrar_resumo:
         soma = sum(valores_iniciais.values())
         cols_resumo = st.columns([1, 3])
         with cols_resumo[0]:
             if abs(soma - 100.0) < 0.01:
-                st.success(f"✅ Soma: {soma:.2f}%")
+                st.success(f"Soma: {soma:.2f}%")
             elif soma == 0:
                 st.info("Soma: 0,00%")
             else:
-                st.warning(f"⚠️ Soma: {soma:.2f}% (deve ser 100%)")
+                st.warning(f"Soma: {soma:.2f}% — deve ser 100%")
         with cols_resumo[1]:
             st.progress(min(soma / 100, 1.0))
+
+    # ---- Ajuste manual mes a mes ----
+    with st.expander("Ajuste manual mês a mês", expanded=False):
+        # Sincronizacao: detecta mudanca externa em valores_iniciais e limpa widgets
+        _CV_HASH_KEY_M = f"_tm_hash_{nome_unico}"
+        _cv_hash = str(sorted(valores_iniciais.items()))
+        if st.session_state.get(_CV_HASH_KEY_M) != _cv_hash:
+            for _k in list(st.session_state.keys()):
+                if f"_tm_{nome_unico}_m" in _k:
+                    del st.session_state[_k]
+            st.session_state[_CV_HASH_KEY_M] = _cv_hash
+
+        # Estado comprometido por mes
+        _committed_m = {m: valores_iniciais.get(m, 0.0) for m in range(horizonte_meses)}
+
+        # Renderizar em grupos de 4 meses por linha
+        MESES_POR_LINHA = 4
+        resultados_manual: dict[int, float] = {}
+
+        meses_total = list(range(horizonte_meses))
+        for _row_idx in range(0, len(meses_total), MESES_POR_LINHA):
+            _batch = meses_total[_row_idx:_row_idx + MESES_POR_LINHA]
+            _cols = st.columns(len(_batch))
+            for _col, _mes in zip(_cols, _batch):
+                with _col:
+                    _marco = (marcos or {}).get(_mes, "")
+                    if _marco:
+                        st.markdown(
+                            f'<p style="font-size:11px;font-weight:600;color:#B8942A;'
+                            f'margin:0 0 2px 0;">◆ M{_mes} — {_marco}</p>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(
+                            f'<p style="font-size:11px;color:#8A8880;margin:0 0 2px 0;">M{_mes}</p>',
+                            unsafe_allow_html=True,
+                        )
+                    _v = st.number_input(
+                        f"M{_mes}",
+                        value=float(_committed_m[_mes]),
+                        min_value=0.0,
+                        max_value=100.0,
+                        step=0.5,
+                        format="%.2f",
+                        key=f"_tm_{nome_unico}_m{_mes}",
+                        label_visibility="collapsed",
+                    )
+                    if _v > 0:
+                        resultados_manual[_mes] = _v
+
+        _soma_manual = sum(resultados_manual.values())
+        col_soma_m, col_btn_m, col_clr_m = st.columns([2, 1, 1])
+        with col_soma_m:
+            if abs(_soma_manual - 100.0) < 0.01:
+                st.success(f"Soma: {_soma_manual:.2f}%")
+            elif _soma_manual == 0:
+                st.info("Soma: 0,00%")
+            else:
+                st.warning(f"Soma: {_soma_manual:.2f}% — deve ser 100%")
+        with col_btn_m:
+            if st.button(
+                "Aplicar",
+                key=f"_tabela_aplicar_{nome_unico}",
+                type="primary",
+                width="stretch",
+                help="Aplica os valores editados ao grafico",
+                icon=":material/play_arrow:",
+            ):
+                st.session_state[_chave_manual] = resultados_manual
+                st.rerun()
+        with col_clr_m:
+            if st.button(
+                "Limpar",
+                key=f"_tabela_limpar_{nome_unico}",
+                width="stretch",
+                help="Zera todos os valores da tabela",
+                icon=":material/delete_sweep:",
+            ):
+                st.session_state[_chave_manual] = {}
+                st.rerun()
 
     return dict(valores_iniciais)
 
@@ -271,8 +356,9 @@ def atalhos_por_intervalos(
         with cols[-1]:
             st.markdown("&nbsp;")
             if st.button(
-                "🗑️", key=f"_ativ_{nome_unico}_{uid}_rm",
-                use_container_width=True, help="Remover intervalo",
+                "Remover", key=f"_ativ_{nome_unico}_{uid}_rm",
+                width="stretch", help="Remover intervalo",
+                icon=":material/delete:",
             ):
                 indices_remover.append(i)
 
@@ -285,7 +371,7 @@ def atalhos_por_intervalos(
     col_add, col_soma, col_aplic, col_clr = st.columns([1, 2, 1, 1])
 
     with col_add:
-        if st.button("➕ Intervalo", key=f"_ativ_{nome_unico}_add", use_container_width=True):
+        if st.button("Intervalo", key=f"_ativ_{nome_unico}_add", width="stretch", icon=":material/add:"):
             ctr = st.session_state.get(chave_ctr, len(intervalos))
             st.session_state[chave_ctr] = ctr + 1
             intervalos.append({
@@ -299,16 +385,17 @@ def atalhos_por_intervalos(
 
     with col_soma:
         if abs(soma - 100.0) < 0.01:
-            st.success(f"✅ Soma: {soma:.1f}%")
+            st.success(f"Soma: {soma:.1f}%")
         elif soma == 0:
             st.info(f"Soma: {soma:.1f}%")
         else:
-            st.warning(f"⚠️ Soma: {soma:.1f}% (deve ser 100%)")
+            st.warning(f"Soma: {soma:.1f}% — deve ser 100%")
 
     with col_aplic:
         if st.button(
-            "▶️ Aplicar", key=f"_ativ_{nome_unico}_apply",
-            use_container_width=True, type="primary",
+            "Aplicar", key=f"_ativ_{nome_unico}_apply",
+            width="stretch", type="primary",
+            icon=":material/play_arrow:",
         ):
             resultado: dict = {}
             for iv in intervalos:
@@ -330,7 +417,7 @@ def atalhos_por_intervalos(
             st.rerun()
 
     with col_clr:
-        if st.button("🧹 Limpar", key=f"_ativ_{nome_unico}_clr", use_container_width=True):
+        if st.button("Limpar", key=f"_ativ_{nome_unico}_clr", width="stretch", icon=":material/delete_sweep:"):
             st.session_state[chave_resultado] = {}
             st.rerun()
 
@@ -380,75 +467,35 @@ def atalhos_contextuais(categoria: str, marcos: dict[int, str], horizonte: int) 
     presets: dict[str, dict[int, float]] = {}
 
     # ------------------------------------------------------------------
-    # PROJETOS TECNICOS
-    # Contratacao tipica: sinal no inicio + parcelas ate a entrega do produto.
-    # Topografia/sondagem: antes da aprovacao.
-    # Projeto urbanistico: M0 ate aprovacao.
-    # Projetos complementares: aprovacao ate inicio das obras.
+    # PROJETOS TECNICOS — 2 opcoes mais comuns
     # ------------------------------------------------------------------
     if categoria == "projetos":
         if mes_aprovacao:
-            m_meio = max(1, mes_aprovacao // 2)
             presets[f"30% sinal (M0) + 70% linear ate aprovacao (M{mes_aprovacao})"] = _merge(
                 _av(0, 30.0),
                 _lin(1, mes_aprovacao, 70.0),
             )
-            presets[f"Sinal M0 + 50% no meio + entrega na aprovacao"] = _merge(
-                _av(0, 30.0),
-                _av(m_meio, 40.0),
-                _av(mes_aprovacao, 30.0),
-            )
-            presets[f"Linear de M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
-        if mes_aprovacao and mes_inicio_obras and mes_inicio_obras > mes_aprovacao:
-            presets[f"Linear: aprovacao ate inicio das obras (M{mes_aprovacao}–M{mes_inicio_obras})"] = (
-                _lin(mes_aprovacao, mes_inicio_obras)
-            )
-            presets[f"50% na aprovacao + 50% no inicio das obras (M{mes_inicio_obras})"] = _merge(
-                _av(mes_aprovacao, 50.0),
-                _av(mes_inicio_obras, 50.0),
-            )
         presets["A vista no inicio (M0)"] = _av(0)
 
     # ------------------------------------------------------------------
-    # LICENCIAMENTO E TAXAS
-    # LP (Licenca Previa): antes da aprovacao — maior parte dos custos.
-    # LI (Licenca de Instalacao): aprovacao ate inicio das obras.
-    # LO (Licenca de Operacao): termino das obras.
-    # Aprovacao prefeitura: distribuida de M0 ate aprovacao.
-    # Registro cartorio: apos aprovacao, antes do lancamento.
-    # Medida compensatoria: condicao de LP/LI, paga na aprovacao.
+    # LICENCIAMENTO E TAXAS — 2 opcoes mais comuns
     # ------------------------------------------------------------------
     elif categoria == "licenciamento":
         if mes_aprovacao and mes_inicio_obras and mes_fim_obras:
             m_lp_fim = max(0, mes_aprovacao - 1)
             m_li_fim = max(mes_aprovacao, mes_inicio_obras - 1)
             presets["LP/LI/LO: 50% ate aprovacao + 30% ate obras + 20% no termino"] = _merge(
-                _lin(0,            m_lp_fim,      50.0),
-                _lin(mes_aprovacao, m_li_fim,      30.0),
-                _av(mes_fim_obras,                 20.0),
+                _lin(0,             m_lp_fim,  50.0),
+                _lin(mes_aprovacao, m_li_fim,  30.0),
+                _av(mes_fim_obras,             20.0),
             )
         if mes_aprovacao:
-            m_ate_obras = mes_inicio_obras or (mes_aprovacao + 6)
-            presets[f"Linear de M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
-            presets[f"60% na aprovacao + 40% linear ate inicio das obras"] = _merge(
-                _av(mes_aprovacao, 60.0),
-                _lin(mes_aprovacao + 1, max(mes_aprovacao + 1, m_ate_obras), 40.0),
-            )
             presets[f"A vista na aprovacao (M{mes_aprovacao})"] = _av(mes_aprovacao)
-        if mes_aprovacao and mes_lancamento and mes_lancamento > mes_aprovacao:
-            presets[f"Aprovacao ao lancamento (M{mes_aprovacao}–M{mes_lancamento})"] = (
-                _lin(mes_aprovacao, mes_lancamento)
-            )
-        if mes_inicio_obras:
-            presets[f"A vista no inicio das obras (M{mes_inicio_obras})"] = _av(mes_inicio_obras)
-        if mes_fim_obras:
-            presets[f"A vista no termino das obras (M{mes_fim_obras})"] = _av(mes_fim_obras)
+        if not presets:
+            presets["A vista no inicio (M0)"] = _av(0)
 
     # ------------------------------------------------------------------
-    # MARKETING E VENDAS
-    # Pre-lancamento: preparacao do stand e material (1-2 meses antes).
-    # Lancamento: pico de investimento.
-    # Sustentacao: publicidade diluida durante o periodo de vendas (obras).
+    # MARKETING E VENDAS — 2 opcoes mais comuns
     # ------------------------------------------------------------------
     elif categoria == "marketing":
         if mes_lancamento and mes_fim_obras:
@@ -457,37 +504,18 @@ def atalhos_contextuais(categoria: str, marcos: dict[int, str], horizonte: int) 
                 _lin(m_pre, max(m_pre, mes_lancamento - 1), 20.0),
                 _lin(mes_lancamento, mes_fim_obras, 80.0),
             )
-            presets[f"30% no lancamento + 70% diluido ate fim das obras"] = _merge(
-                _av(mes_lancamento, 30.0),
-                _lin(mes_lancamento + 1, mes_fim_obras, 70.0) if mes_fim_obras > mes_lancamento else {},
-            )
             presets[f"Linear: lancamento ate fim das obras (M{mes_lancamento}–M{mes_fim_obras})"] = (
                 _lin(mes_lancamento, mes_fim_obras)
             )
-            presets[f"Intenso no lancamento: 50% + 50% restante diluido"] = _merge(
-                _av(mes_lancamento, 50.0),
-                _lin(mes_lancamento + 1, mes_fim_obras, 50.0) if mes_fim_obras > mes_lancamento else {},
-            )
-        if mes_lancamento:
+        elif mes_lancamento:
             presets[f"A vista no lancamento (M{mes_lancamento})"] = _av(mes_lancamento)
 
     # ------------------------------------------------------------------
-    # OUTRAS DESPESAS
-    # Assessoria juridica: acompanhamento continuo M0 ate fim das obras.
-    # Gestao/incorporadora: similar.
-    # Outros pontuais: a vista em marcos.
+    # OUTRAS DESPESAS — 2 opcoes mais comuns
     # ------------------------------------------------------------------
     elif categoria == "outros":
         if mes_fim_obras:
             presets[f"Linear: M0 ate fim das obras (M{mes_fim_obras})"] = _lin(0, mes_fim_obras)
-        if mes_aprovacao and mes_fim_obras:
-            presets[f"Linear: aprovacao ate fim das obras (M{mes_aprovacao}–M{mes_fim_obras})"] = (
-                _lin(mes_aprovacao, mes_fim_obras)
-            )
-        if mes_aprovacao:
-            presets[f"Linear: M0 ate aprovacao (M{mes_aprovacao})"] = _lin(0, mes_aprovacao)
-        if mes_lancamento:
-            presets[f"A vista no lancamento (M{mes_lancamento})"] = _av(mes_lancamento)
         presets["A vista no inicio (M0)"] = _av(0)
 
     return presets

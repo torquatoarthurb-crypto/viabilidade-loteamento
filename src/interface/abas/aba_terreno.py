@@ -39,6 +39,7 @@ from ..tabela_mensal import (
 
 
 CHAVE_FLUXO = "aba_terreno_fluxo_distrib"
+CHAVE_FLUXO_ENTRADA = "aba_terreno_fluxo_entrada_cash"  # customizado do componente dinheiro nas permutas
 
 _MODO_LABEL = {
     "sem_pagamento": "Sem Pagamento de Terreno (permuta total ou doacao)",
@@ -57,8 +58,8 @@ _MODO_PARA_TIPO_PERMUTA["sem_pagamento"] = "sem_permuta"
 
 
 def _garantir_estado(projeto) -> None:
+    acq = projeto.aquisicao
     if CHAVE_FLUXO not in st.session_state:
-        acq = projeto.aquisicao
         if acq.forma_pagamento == "customizado" and acq.fluxo_percentuais:
             distrib = {
                 acq.fluxo_mes_inicio + k: pct
@@ -68,6 +69,21 @@ def _garantir_estado(projeto) -> None:
         else:
             distrib = {}
         st.session_state[CHAVE_FLUXO] = distrib
+    if CHAVE_FLUXO_ENTRADA not in st.session_state:
+        # Carrega distribuicao da entrada em dinheiro das permutas (forma customizado)
+        _em_permuta = acq.forma_pagamento == "sem_desembolso" or projeto.receitas.tipo_permuta != "sem_permuta"
+        if _em_permuta and acq.forma_pagamento == "customizado" and acq.fluxo_percentuais:
+            _d = {
+                acq.fluxo_mes_inicio + k: pct
+                for k, pct in enumerate(acq.fluxo_percentuais)
+                if pct > 0
+            }
+        else:
+            _d = {}
+        st.session_state[CHAVE_FLUXO_ENTRADA] = _d
+    if "ater_tem_entrada_dinheiro" not in st.session_state:
+        # True se ha um componente em dinheiro real salvo (nao o placeholder sem_desembolso)
+        st.session_state["ater_tem_entrada_dinheiro"] = acq.forma_pagamento != "sem_desembolso"
 
 
 def _distrib_dict_para_lista(distrib: dict) -> tuple[int, list[float]]:
@@ -77,6 +93,174 @@ def _distrib_dict_para_lista(distrib: dict) -> tuple[int, list[float]]:
     mes_max = max(distrib.keys())
     lista = [distrib.get(mes_min + k, 0.0) for k in range(mes_max - mes_min + 1)]
     return mes_min, lista
+
+
+# ============================================================
+# COMPONENTE EM DINHEIRO (reutilizavel por qualquer modo de permuta)
+# ============================================================
+
+def _renderizar_componente_dinheiro(aquisicao, horizonte: int, marcos: dict) -> dict | None:
+    """
+    Secao opcional que adiciona um componente de pagamento em dinheiro
+    a qualquer tipo de aquisicao (permuta fisica, financeira ou sem pagamento).
+
+    Retorna dict com os dados do pagamento, ou None se o toggle estiver desligado.
+    """
+    st.markdown("---")
+    tem_entrada = st.toggle(
+        "Inclui também pagamento em dinheiro",
+        key="ater_tem_entrada_dinheiro",
+        help=(
+            "Adiciona um componente de pagamento em dinheiro ao terrenista, "
+            "além da permuta configurada acima. "
+            "Ex.: entrada de R$ 200 mil à vista no ato + permuta de lotes."
+        ),
+    )
+
+    if not tem_entrada:
+        return None
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        _valor_default = float(aquisicao.valor_total) if aquisicao.forma_pagamento != "sem_desembolso" else 0.0
+        valor_entrada = numero_brl(
+            "Valor em dinheiro (R$)",
+            value=_valor_default,
+            key="ater_entrada_valor",
+            min_value=0.01,
+        )
+    with col2:
+        custo_cartorio_e = numero_brl(
+            "Cartório / registro (R$)",
+            value=float(aquisicao.custo_cartorio),
+            key="ater_entrada_cartorio",
+            min_value=0.0,
+        )
+    with col3:
+        mes_cartorio_e = int(numero_brl(
+            "Mês do cartório",
+            value=float(aquisicao.mes_pagamento_cartorio),
+            key="ater_entrada_mes_cart",
+            min_value=0.0,
+            max_value=float(horizonte),
+            casas=0,
+        ))
+
+    _forma_atual = aquisicao.forma_pagamento if aquisicao.forma_pagamento != "sem_desembolso" else "a_vista"
+    forma_e = st.radio(
+        "Forma de pagamento em dinheiro",
+        options=["a_vista", "parcelado", "customizado"],
+        format_func=lambda x: {
+            "a_vista": "À vista (pagamento único)",
+            "parcelado": "Parcelado (N parcelas iguais)",
+            "customizado": "Distribuição personalizada (tabela mensal livre)",
+        }[x],
+        index=["a_vista", "parcelado", "customizado"].index(_forma_atual),
+        horizontal=True,
+        key="ater_entrada_forma",
+    )
+
+    mes_pgto_e = int(aquisicao.mes_pagamento)
+    mes_ini_parc_e = int(aquisicao.mes_inicio_parcelas)
+    qtd_parc_e = max(int(aquisicao.qtd_parcelas), 2)
+    distrib_e: dict = {}
+
+    if forma_e == "a_vista":
+        mes_pgto_e = int(numero_brl(
+            "Mês de pagamento",
+            value=float(aquisicao.mes_pagamento),
+            key="ater_entrada_mes_pgto",
+            min_value=0.0,
+            max_value=float(horizonte),
+            casas=0,
+        ))
+
+    elif forma_e == "parcelado":
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            mes_ini_parc_e = int(numero_brl(
+                "Mês início das parcelas",
+                value=float(aquisicao.mes_inicio_parcelas),
+                key="ater_entrada_ini_parc",
+                min_value=0.0,
+                max_value=float(horizonte),
+                casas=0,
+            ))
+        with col_p2:
+            qtd_parc_e = int(numero_brl(
+                "Quantidade de parcelas",
+                value=float(max(int(aquisicao.qtd_parcelas), 2)),
+                key="ater_entrada_qtd_parc",
+                min_value=2.0,
+                casas=0,
+            ))
+        _parcela_e = valor_entrada / qtd_parc_e if qtd_parc_e > 0 else 0
+        st.caption(
+            f"Parcela mensal: {formatar_brl(_parcela_e)} — "
+            f"de M{mes_ini_parc_e} a M{mes_ini_parc_e + qtd_parc_e - 1}"
+        )
+
+    elif forma_e == "customizado":
+        st.caption(
+            "Distribua o valor total mês a mês. A soma deve ser 100%. "
+            "Use o atalho 'Linear' para distribuir igualmente em um intervalo."
+        )
+        col_a, col_b, col_c, col_d = st.columns([2, 2, 1, 1])
+        with col_a:
+            mi_e = int(numero_brl(
+                "Mês início",
+                value=0.0,
+                key="ater_entrada_cu_mi",
+                min_value=0.0,
+                max_value=float(horizonte),
+                casas=0,
+            ))
+        with col_b:
+            mf_e = int(numero_brl(
+                "Mês fim",
+                value=float(min(11, horizonte)),
+                key="ater_entrada_cu_mf",
+                min_value=0.0,
+                max_value=float(horizonte),
+                casas=0,
+            ))
+        with col_c:
+            st.markdown("&nbsp;")
+            if st.button("Linear", key="ater_entrada_btn_lin", width="stretch"):
+                st.session_state[CHAVE_FLUXO_ENTRADA] = gerar_distribuicao_linear(mi_e, mf_e)
+                st.rerun()
+        with col_d:
+            st.markdown("&nbsp;")
+            if st.button("Limpar", key="ater_entrada_btn_clr", width="stretch", icon=":material/delete_sweep:"):
+                st.session_state[CHAVE_FLUXO_ENTRADA] = {}
+                st.rerun()
+
+        distrib_e = tabela_mensal_distribuicao(
+            nome_unico="terreno_entrada_cash",
+            horizonte_meses=horizonte,
+            valores_iniciais=st.session_state[CHAVE_FLUXO_ENTRADA],
+            marcos=marcos,
+        )
+        st.session_state[CHAVE_FLUXO_ENTRADA] = distrib_e
+
+        _soma_e = sum(distrib_e.values())
+        if abs(_soma_e - 100.0) < 0.01:
+            st.success(f"Soma: {_soma_e:.2f}%")
+        elif _soma_e == 0:
+            st.info("Preencha a distribuição mensal acima.")
+        else:
+            st.warning(f"Soma: {_soma_e:.2f}% — deve ser 100%")
+
+    return {
+        "valor_entrada": valor_entrada,
+        "forma": forma_e,
+        "mes_pgto": mes_pgto_e,
+        "mes_ini_parc": mes_ini_parc_e,
+        "qtd_parc": qtd_parc_e,
+        "distrib": distrib_e,
+        "custo_cartorio": custo_cartorio_e,
+        "mes_cartorio": mes_cartorio_e,
+    }
 
 
 # ============================================================
@@ -205,12 +389,12 @@ def _renderizar_opcao_direta(projeto, horizonte, marcos) -> dict:
             )
         with col_c:
             st.markdown("&nbsp;")
-            if st.button("Linear", key="ater_cu_btn_lin", use_container_width=True):
+            if st.button("Linear", key="ater_cu_btn_lin", width="stretch"):
                 st.session_state[CHAVE_FLUXO] = gerar_distribuicao_linear(mi_lin, mf_lin)
                 st.rerun()
         with col_d:
             st.markdown("&nbsp;")
-            if st.button("🧹 Limpar", key="ater_cu_btn_clear", use_container_width=True):
+            if st.button("Limpar", key="ater_cu_btn_clear", width="stretch", icon=":material/delete_sweep:"):
                 st.session_state[CHAVE_FLUXO] = {}
                 st.rerun()
 
@@ -224,11 +408,11 @@ def _renderizar_opcao_direta(projeto, horizonte, marcos) -> dict:
 
         soma = sum(distrib.values())
         if abs(soma - 100.0) < 0.01:
-            st.success(f"✅ Soma: {soma:.2f}%")
+            st.success(f"Soma: {soma:.2f}%")
         elif soma == 0:
             st.info("Preencha a distribuicao mensal acima.")
         else:
-            st.warning(f"⚠️ Soma: {soma:.2f}% (deve ser 100%)")
+            st.warning(f"Soma: {soma:.2f}% — deve ser 100%")
 
     return {
         "valor_total": valor_total,
@@ -364,7 +548,7 @@ def _renderizar_opcao_permuta_financeira(projeto) -> dict:
             )
 
         st.info(
-            f"💡 Nos primeiros **{int(meses_ret)} meses**, apenas **{100 - pct_ret:.0f}%** "
+            f"Nos primeiros **{int(meses_ret)} meses**, apenas **{100 - pct_ret:.0f}%** "
             f"da parcela devida sera repassada ao terrenista. "
             f"O **{pct_ret:.0f}%** retido acumula e e corrigido a **{corr_aa:.1f}% a.a.**, "
             f"sendo quitado em **{int(qtd_quit)} parcelas** a partir do mes {int(meses_ret)}. "
@@ -400,8 +584,6 @@ def _renderizar_opcao_permuta_financeira(projeto) -> dict:
 # ============================================================
 
 def _renderizar_opcao_permuta_fisica(projeto) -> list:
-    import pandas as pd
-
     tipologias = projeto.terreno.tipologias
     if not tipologias:
         aviso_validacao("Cadastre tipologias em Identificação (sidebar → Dados) antes de configurar a permuta física.")
@@ -420,39 +602,15 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
 
     mapa_atual = {p.tipologia: p.percentual for p in projeto.receitas.permuta_fisica}
 
-    linhas = []
-    for t in tipologias:
-        vgv_t = _vgv_tip(t)
-        pct = mapa_atual.get(t.nome, 0.0)
-        linhas.append({
-            "Tipologia": t.nome,
-            "Lotes (total)": t.quantidade,
-            "% ao terrenista": pct,
-            "Lotes ao terrenista": int(round(t.quantidade * pct / 100)),
-            "VGV da tipologia (R$)": vgv_t,
-            "VGV ao terrenista (R$)": vgv_t * pct / 100,
-        })
-
-    df = pd.DataFrame(linhas)
-
-    df_edit = st.data_editor(
-        df,
-        use_container_width=True,
-        hide_index=True,
-        disabled=[
-            "Tipologia", "Lotes (total)",
-            "Lotes ao terrenista", "VGV da tipologia (R$)", "VGV ao terrenista (R$)",
-        ],
-        column_config={
-            "% ao terrenista": st.column_config.NumberColumn(
-                "% ao terrenista", min_value=0.0, max_value=100.0, step=5.0, format="%.1f"
-            ),
-            "Lotes ao terrenista": st.column_config.NumberColumn(format="%d"),
-            "VGV da tipologia (R$)": st.column_config.NumberColumn(format="R$ %.0f"),
-            "VGV ao terrenista (R$)": st.column_config.NumberColumn(format="R$ %.0f"),
-        },
-        key="ater_perm_fisica",
-    )
+    # Cabecalho da tabela
+    _col_w = [2, 1, 1.2, 1.2, 1.8, 1.8]
+    _hcols = st.columns(_col_w)
+    for _hc, _hl in zip(_hcols, ["Tipologia", "Lotes total", "% ao terrenista", "Lotes ao terrenista", "VGV tipologia", "VGV ao terrenista"]):
+        with _hc:
+            st.markdown(
+                f'<div style="font-size:11px;color:#9CA3AF;font-weight:600;padding-bottom:2px;">{_hl}</div>',
+                unsafe_allow_html=True,
+            )
 
     # Totalizador
     vgv_total = 0.0
@@ -461,21 +619,55 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
     lotes_permuta = 0.0
     permuta_items = []
 
-    for _, row in df_edit.iterrows():
-        nome = str(row["Tipologia"])
-        pct = float(row.get("% ao terrenista") or 0)
-        tip = next((t for t in tipologias if t.nome == nome), None)
-        if tip:
-            vgv_t = _vgv_tip(tip)
-            vgv_total += vgv_t
-            vgv_permuta += vgv_t * pct / 100
-            lotes_total += tip.quantidade
-            lotes_permuta += tip.quantidade * pct / 100
-            if pct > 0:
-                try:
-                    permuta_items.append(PermutaFisicaTipologia(tipologia=nome, percentual=pct))
-                except Exception:
-                    pass
+    for i, t in enumerate(tipologias):
+        vgv_t = _vgv_tip(t)
+        _pct_committed = mapa_atual.get(t.nome, 0.0)
+
+        _rcols = st.columns(_col_w)
+        with _rcols[0]:
+            st.markdown(
+                f'<div style="padding:8px 0 0 0;font-size:13px;">{t.nome}</div>',
+                unsafe_allow_html=True,
+            )
+        with _rcols[1]:
+            st.markdown(
+                f'<div style="padding:8px 0 0 0;font-size:13px;">{t.quantidade}</div>',
+                unsafe_allow_html=True,
+            )
+        with _rcols[2]:
+            pct_widget = numero_brl(
+                "", value=float(_pct_committed),
+                key=f"_pf_{i}_pct",
+                min_value=0.0, max_value=100.0, casas=1,
+                label_visibility="collapsed",
+            )
+        lotes_ter = int(round(t.quantidade * pct_widget / 100))
+        vgv_ter = vgv_t * pct_widget / 100
+        with _rcols[3]:
+            st.markdown(
+                f'<div style="padding:8px 0 0 0;font-size:13px;">{lotes_ter}</div>',
+                unsafe_allow_html=True,
+            )
+        with _rcols[4]:
+            st.markdown(
+                f'<div style="padding:8px 0 0 0;font-size:13px;">{formatar_brl(vgv_t)}</div>',
+                unsafe_allow_html=True,
+            )
+        with _rcols[5]:
+            st.markdown(
+                f'<div style="padding:8px 0 0 0;font-size:13px;">{formatar_brl(vgv_ter)}</div>',
+                unsafe_allow_html=True,
+            )
+
+        vgv_total += vgv_t
+        vgv_permuta += vgv_ter
+        lotes_total += t.quantidade
+        lotes_permuta += t.quantidade * pct_widget / 100
+        if pct_widget > 0:
+            try:
+                permuta_items.append(PermutaFisicaTipologia(tipologia=t.nome, percentual=pct_widget))
+            except Exception:
+                pass
 
     vgv_loteadora = vgv_total - vgv_permuta
     pct_permuta_total = vgv_permuta / vgv_total * 100 if vgv_total > 0 else 0.0
@@ -504,7 +696,7 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
 
     if vgv_permuta > 0:
         st.info(
-            f"💡 Apenas o VGV comercializavel sera base de calculo nas proximas etapas: "
+            f"Apenas o VGV comercializavel sera base de calculo nas proximas etapas: "
             f"**{formatar_brl(vgv_loteadora)}** ({100 - pct_permuta_total:.1f}% do VGV bruto)."
         )
 
@@ -515,16 +707,54 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
 # AUTO-SAVE
 # ============================================================
 
+def _construir_acq_dinheiro(entrada: dict | None, acq_atual) -> AquisicaoTerreno:
+    """
+    Constroi um AquisicaoTerreno a partir dos dados do componente em dinheiro.
+    Se entrada for None ou valor == 0, retorna sem_desembolso.
+    """
+    if not entrada or float(entrada.get("valor_entrada", 0) or 0) <= 0:
+        return AquisicaoTerreno(
+            valor_total=max(float(acq_atual.valor_total), 1.0),
+            forma_pagamento="sem_desembolso",
+        )
+    d = entrada
+    forma = d["forma"]
+    if forma == "customizado":
+        mes_min, lista_pct = _distrib_dict_para_lista(d["distrib"])
+        return AquisicaoTerreno(
+            valor_total=d["valor_entrada"],
+            forma_pagamento="customizado",
+            fluxo_mes_inicio=mes_min,
+            fluxo_percentuais=lista_pct,
+            custo_cartorio=d["custo_cartorio"],
+            mes_pagamento_cartorio=d["mes_cartorio"],
+        )
+    if forma == "parcelado":
+        return AquisicaoTerreno(
+            valor_total=d["valor_entrada"],
+            forma_pagamento="parcelado",
+            mes_inicio_parcelas=d["mes_ini_parc"],
+            qtd_parcelas=max(d["qtd_parc"], 2),
+            custo_cartorio=d["custo_cartorio"],
+            mes_pagamento_cartorio=d["mes_cartorio"],
+        )
+    # a_vista
+    return AquisicaoTerreno(
+        valor_total=d["valor_entrada"],
+        forma_pagamento="a_vista",
+        mes_pagamento=d["mes_pgto"],
+        custo_cartorio=d["custo_cartorio"],
+        mes_pagamento_cartorio=d["mes_cartorio"],
+    )
+
+
 def _autosave(modo: str, result: dict | list, projeto) -> None:
     try:
         tipo_permuta = _MODO_PARA_TIPO_PERMUTA[modo]
 
         # --- Reconstruir AquisicaoTerreno ---
         if modo == "sem_pagamento":
-            nova_acq = AquisicaoTerreno(
-                valor_total=1.0,
-                forma_pagamento="sem_desembolso",
-            )
+            nova_acq = _construir_acq_dinheiro(result.get("entrada_dinheiro"), projeto.aquisicao)
             nova_pf = None
             nova_permuta_fisica = []
         elif modo == "direta":
@@ -560,11 +790,7 @@ def _autosave(modo: str, result: dict | list, projeto) -> None:
             nova_pf = None
             nova_permuta_fisica = []
         elif modo in ("permuta_financeira", "permuta_fisica"):
-            # Para permutas, sem desembolso de compra
-            nova_acq = AquisicaoTerreno(
-                valor_total=max(float(projeto.aquisicao.valor_total), 1.0),
-                forma_pagamento="sem_desembolso",
-            )
+            nova_acq = _construir_acq_dinheiro(result.get("entrada_dinheiro"), projeto.aquisicao)
             if modo == "permuta_financeira":
                 d = result
                 nova_pf = PermutaFinanceira(
@@ -648,12 +874,21 @@ def renderizar() -> None:
             "Nenhum desembolso sera lancado no fluxo de caixa."
         )
         result = {}
+        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+            projeto.aquisicao, horizonte, marcos
+        )
     elif modo == "direta":
         result = _renderizar_opcao_direta(projeto, horizonte, marcos)
     elif modo == "permuta_financeira":
         result = _renderizar_opcao_permuta_financeira(projeto)
+        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+            projeto.aquisicao, horizonte, marcos
+        )
     else:
         result = _renderizar_opcao_permuta_fisica(projeto)
+        result["entrada_dinheiro"] = _renderizar_componente_dinheiro(
+            projeto.aquisicao, horizonte, marcos
+        )
 
     # Navegacao para o proximo modulo
     btn_proximo_modulo("Receitas")

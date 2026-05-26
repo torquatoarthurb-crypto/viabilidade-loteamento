@@ -283,7 +283,7 @@ def renderizar() -> None:
         4,
         "Despesas de Loteamento",
         "Custos com projetos, licenciamento, marketing e estrutura administrativa. "
-        "💾 As alteracoes sao salvas automaticamente.",
+        "As alterações são salvas automaticamente.",
     )
 
     projeto = get_projeto()
@@ -311,7 +311,7 @@ def renderizar() -> None:
     # Botoes de acao globais
     col_add, col_filtro, _ = st.columns([2, 2, 3])
     with col_add:
-        if st.button("➕ Adicionar item", use_container_width=True):
+        if st.button("Adicionar item", width="stretch", icon=":material/add:"):
             despesas_estado.append({
                 "nome": "Nova despesa",
                 "categoria": "outros",
@@ -323,7 +323,7 @@ def renderizar() -> None:
 
     with col_filtro:
         st.session_state[CHAVE_FILTRO_MESES] = st.checkbox(
-            "🔍 Mostrar so meses preenchidos",
+            "Mostrar só meses preenchidos",
             value=st.session_state[CHAVE_FILTRO_MESES],
             help="Quando marcado, esconde meses zerados na tabela mensal "
                  "(mostra apenas os meses com % > 0 mais 3 meses de margem). "
@@ -331,7 +331,7 @@ def renderizar() -> None:
         )
 
     if not despesas_estado:
-        st.info("Nenhuma despesa cadastrada. Clique em '➕ Adicionar despesa' para comecar.")
+        st.info("Nenhuma despesa cadastrada. Clique em '+ Adicionar despesa' para comecar.")
 
     indices_para_remover = []
 
@@ -342,11 +342,11 @@ def renderizar() -> None:
 
         # Status
         if abs(soma_pct - 100.0) < 0.01 and valor_atual > 0:
-            status = "✅"
+            status = "✓"
         elif soma_pct == 0 or valor_atual == 0:
-            status = "⬜"
+            status = "○"
         else:
-            status = "⚠️"
+            status = "!"
 
         titulo = (
             f"{status} **{nome_atual}** "
@@ -410,25 +410,25 @@ def renderizar() -> None:
             with col4:
                 st.markdown("&nbsp;")
                 if st.button(
-                    "🗑️", key=f"desp_{idx}_remover", use_container_width=True,
-                    help="Remover esta despesa",
+                    "Remover", key=f"desp_{idx}_remover", width="stretch",
+                    help="Remover esta despesa", icon=":material/delete:",
                 ):
                     indices_para_remover.append(idx)
 
             # ----- ATALHOS CONTEXTUAIS POR CATEGORIA -----
             presets = atalhos_contextuais(nova_cat, marcos, horizonte)
             if presets:
-                st.markdown(f"**🎯 Atalhos sugeridos para '{cat_labels.get(nova_cat, nova_cat)}':**")
-                cols_presets = st.columns(min(len(presets), 3))
-                for i, (label, distrib) in enumerate(presets.items()):
-                    with cols_presets[i % len(cols_presets)]:
-                        if st.button(
-                            label, key=f"desp_{idx}_preset_{i}",
-                            use_container_width=True,
-                        ):
-                            despesa["distribuicao"] = distrib
-                            _autosave_aba4()
-                            st.rerun()
+                with st.expander(f"Atalhos de distribuição — {cat_labels.get(nova_cat, nova_cat)}", expanded=False):
+                    cols_presets = st.columns(min(len(presets), 2))
+                    for i, (label, distrib) in enumerate(presets.items()):
+                        with cols_presets[i % len(cols_presets)]:
+                            if st.button(
+                                label, key=f"desp_{idx}_preset_{i}",
+                                width="stretch",
+                            ):
+                                despesa["distribuicao"] = distrib
+                                _autosave_aba4()
+                                st.rerun()
 
             # ----- ATALHOS POR INTERVALOS -----
             chave_atl_desp = f"_ativ_result_desp_{idx}"
@@ -436,11 +436,19 @@ def renderizar() -> None:
                 despesa["distribuicao"] = st.session_state.pop(chave_atl_desp)
                 _autosave_aba4()
 
-            st.markdown("**Distribuicao por intervalos:**")
+            st.markdown(
+                '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+                'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição por intervalos</div>',
+                unsafe_allow_html=True,
+            )
             st.caption("Defina faixas com % e clique Aplicar.")
             atalhos_por_intervalos(f"despesa_{idx}", horizonte, chave_atl_desp)
 
-            st.markdown("**Grafico de distribuicao mensal:**")
+            st.markdown(
+                '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+                'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição mensal</div>',
+                unsafe_allow_html=True,
+            )
             nova_distrib = tabela_mensal_distribuicao(
                 nome_unico=f"despesa_{idx}",
                 horizonte_meses=horizonte,
@@ -460,12 +468,9 @@ def renderizar() -> None:
             despesa["valor_total"] = novo_valor
             despesa["distribuicao"] = nova_distrib
 
-            if mudou_meta:
-                _autosave_aba4()
-
             col_sv, _ = st.columns([1, 3])
             with col_sv:
-                if st.button("💾 Salvar fluxo", key=f"desp_{idx}_salvar_fluxo", use_container_width=True):
+                if st.button("Salvar fluxo", key=f"desp_{idx}_salvar_fluxo", width="stretch", icon=":material/save:"):
                     _autosave_aba4()
 
     # Remover despesas marcadas
@@ -477,35 +482,41 @@ def renderizar() -> None:
 
     # Subtotais
     if despesas_estado:
-        st.markdown("##### Subtotais por categoria")
-        agg = {"projetos": 0.0, "licenciamento": 0.0, "marketing": 0.0, "outros": 0.0}
-        for d in despesas_estado:
-            agg[d["categoria"]] = agg.get(d["categoria"], 0) + float(d["valor_total"] or 0)
-        cols = st.columns(4)
-        labels = {
-            "projetos": "Projetos",
-            "licenciamento": "Licenciamento",
-            "marketing": "Marketing",
-            "outros": "Outras",
-        }
-        for i, cat in enumerate(["projetos", "licenciamento", "marketing", "outros"]):
-            with cols[i]:
-                st.metric(labels[cat], formatar_brl(agg[cat]))
-        total = sum(agg.values())
-        st.metric("**Total das despesas**", formatar_brl(total))
+        with st.container(border=True):
+            st.markdown(
+                '<div style="font-size:10px;font-weight:600;letter-spacing:0.10em;'
+                'text-transform:uppercase;color:var(--stone-500);margin-bottom:8px;">Subtotais por categoria</div>',
+                unsafe_allow_html=True,
+            )
+            agg = {"projetos": 0.0, "licenciamento": 0.0, "marketing": 0.0, "outros": 0.0}
+            for d in despesas_estado:
+                agg[d["categoria"]] = agg.get(d["categoria"], 0) + float(d["valor_total"] or 0)
+            cols = st.columns(5)
+            labels = {
+                "projetos": "Projetos",
+                "licenciamento": "Licenciamento",
+                "marketing": "Marketing",
+                "outros": "Outras",
+            }
+            for i, cat in enumerate(["projetos", "licenciamento", "marketing", "outros"]):
+                with cols[i]:
+                    st.metric(labels[cat], formatar_brl(agg[cat]))
+            total = sum(agg.values())
+            with cols[4]:
+                st.metric("Total", formatar_brl(total))
 
     # ============================================================
     # CARD 2 — ADMINISTRACAO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🏢 Estrutura Administrativa")
+        st.markdown("#### Estrutura Administrativa")
         st.caption(
             "% sobre a receita mensal do projeto. "
             "Incide apenas quando ha receita, na mesma logica dos impostos. "
-            "💾 Salvo automaticamente."
+            "Salvo automaticamente."
         )
 
-        col1, _ = st.columns([1, 2])
+        col1, _ = st.columns([2, 3])
         with col1:
             percentual_admin = numero_brl(
                 "% sobre a receita mensal",
@@ -519,7 +530,7 @@ def renderizar() -> None:
     # CARD 3 — COMISSAO DE VENDA
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 💼 Comissao de Venda (Corretagem)")
+        st.markdown("#### Comissão de Venda (Corretagem)")
 
         comissao_atual = projeto.impostos.comissao
 
@@ -536,9 +547,9 @@ def renderizar() -> None:
                 "Quando a comissao e paga ao corretor?",
                 options=["sobre_venda", "sobre_recebimento", "misto"],
                 format_func=lambda x: {
-                    "sobre_venda": "💼 Integral no mes da venda",
-                    "sobre_recebimento": "📊 Proporcional ao recebimento",
-                    "misto": "🔀 Misto (X% no ato + Y% diluido em N parcelas)",
+                    "sobre_venda": "Integral no mês da venda",
+                    "sobre_recebimento": "Proporcional ao recebimento",
+                    "misto": "Misto (X% no ato + Y% diluído em N parcelas)",
                 }[x],
                 index=["sobre_venda", "sobre_recebimento", "misto"].index(
                     comissao_atual.modo_pagamento
@@ -562,8 +573,8 @@ def renderizar() -> None:
                     min_value=1.0, casas=0,
                 )
                 st.info(
-                    f"💡 {misto_pct_ato:.0f}% no mes da venda + "
-                    f"{100-misto_pct_ato:.0f}% diluido em {int(misto_qtd)} parcelas mensais."
+                    f"{misto_pct_ato:.0f}% no mês da venda + "
+                    f"{100-misto_pct_ato:.0f}% diluído em {int(misto_qtd)} parcelas mensais."
                 )
             else:
                 misto_pct_ato = comissao_atual.misto_percentual_no_ato
@@ -572,11 +583,7 @@ def renderizar() -> None:
     # Navegacao para o proximo modulo
     btn_proximo_modulo("Impostos")
 
-    # Auto-save administracao
-    if desenv.administracao.percentual != percentual_admin:
-        _autosave_administracao(percentual_admin)
-
-    # Auto-save comissao
+    # Staged: persiste valores de admin e comissao para sincronizar_aba4
     try:
         nova_com = ComissaoVenda(
             percentual_vgv=comissao_pct,
@@ -584,8 +591,8 @@ def renderizar() -> None:
             misto_percentual_no_ato=misto_pct_ato,
             misto_qtd_parcelas=misto_qtd,
         )
-        if projeto.impostos.comissao != nova_com:
-            _autosave_comissao(nova_com)
+        st.session_state["_aba4_admin_pct"] = float(percentual_admin)
+        st.session_state["_aba4_comissao"] = nova_com
     except Exception:
         pass
 
@@ -594,3 +601,11 @@ def sincronizar_aba4() -> None:
     """Salva o estado em memoria da Aba 4 no projeto (chamado pelo sidebar antes de Calcular)."""
     if CHAVE_DESPESAS in st.session_state:
         _autosave_aba4()
+
+    # Salva administracao e comissao se houver staged
+    admin_pct = st.session_state.get("_aba4_admin_pct")
+    nova_com = st.session_state.get("_aba4_comissao")
+    if admin_pct is not None:
+        _autosave_administracao(float(admin_pct))
+    if nova_com is not None:
+        _autosave_comissao(nova_com)

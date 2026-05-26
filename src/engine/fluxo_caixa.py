@@ -64,27 +64,46 @@ def _calcular_horizonte(projeto: Projeto) -> int:
     inicio = projeto.terreno.datas.inicio_projeto
     mes_termino_obras = meses_entre(inicio, projeto.terreno.datas.termino_obras)
 
-    # Maior mes de venda na curva
-    ultimo_mes_venda = max(f.mes_fim for f in projeto.receitas.curva_vendas)
+    # Maior mes de venda (novo formato: fluxos_tipologia; legado: curva_vendas)
+    if projeto.receitas.fluxos_tipologia:
+        meses_venda_iter = [
+            int(m)
+            for ft in projeto.receitas.fluxos_tipologia
+            for m in ft.curva_mensal.keys()
+            if float(ft.curva_mensal[m]) > 0
+        ]
+        ultimo_mes_venda = max(meses_venda_iter) if meses_venda_iter else mes_termino_obras
+    else:
+        curva = projeto.receitas.curva_vendas
+        ultimo_mes_venda = max(f.mes_fim for f in curva) if curva else mes_termino_obras
 
-    # Maior horizonte de fluxo (entre os fluxos disponiveis)
+    # Maior horizonte de fluxo
     horizonte_fluxo = 0
-    for fluxo in projeto.receitas.fluxos_recebiveis:
-        # Sinal pode ir ate ultimo_mes_venda + qtd_parcelas_sinal - 1
-        h_sinal = ultimo_mes_venda + max(fluxo.qtd_parcelas_sinal, 1) - 1
-        # Parcelas obra terminam em mes_termino_obras
-        h_obra = mes_termino_obras
-        # Baloes a partir da ultima venda
-        h_baloes = (
-            ultimo_mes_venda + fluxo.qtd_baloes * 12 if fluxo.qtd_baloes > 0 else 0
-        )
-        # Financiamento comeca apos termino de obras
-        h_fin = (
-            mes_termino_obras + fluxo.qtd_parcelas_financiamento
-            if fluxo.qtd_parcelas_financiamento > 0
-            else 0
-        )
-        horizonte_fluxo = max(horizonte_fluxo, h_sinal, h_obra, h_baloes, h_fin)
+
+    if projeto.receitas.fluxos_tipologia:
+        for ft in projeto.receitas.fluxos_tipologia:
+            try:
+                fluxo = ft.as_fluxo_recebiveis()
+            except Exception:
+                continue
+            h_sinal = ultimo_mes_venda + max(fluxo.qtd_parcelas_sinal, 1) - 1
+            h_obra = mes_termino_obras
+            h_baloes = ultimo_mes_venda + fluxo.qtd_baloes * 12 if fluxo.qtd_baloes > 0 else 0
+            h_fin = (mes_termino_obras + fluxo.qtd_parcelas_financiamento
+                     if fluxo.qtd_parcelas_financiamento > 0 else 0)
+            horizonte_fluxo = max(horizonte_fluxo, h_sinal, h_obra, h_baloes, h_fin)
+    else:
+        for fluxo in projeto.receitas.fluxos_recebiveis:
+            h_sinal = ultimo_mes_venda + max(fluxo.qtd_parcelas_sinal, 1) - 1
+            h_obra = mes_termino_obras
+            h_baloes = (
+                ultimo_mes_venda + fluxo.qtd_baloes * 12 if fluxo.qtd_baloes > 0 else 0
+            )
+            h_fin = (
+                mes_termino_obras + fluxo.qtd_parcelas_financiamento
+                if fluxo.qtd_parcelas_financiamento > 0 else 0
+            )
+            horizonte_fluxo = max(horizonte_fluxo, h_sinal, h_obra, h_baloes, h_fin)
 
     # Adiciona 2 meses de buffer (conforme regra do documento)
     return max(mes_termino_obras, horizonte_fluxo) + 2
@@ -153,14 +172,26 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         horizonte,
     )
 
-    # ----- 8. CONSOLIDAR EM DATAFRAME -----
+    # ----- 8. OUTRAS RECEITAS (aportes, receitas financeiras, etc.) -----
+    outras_rec = np.zeros(n)
+    for _item in projeto.receitas.outras_receitas:
+        if _item.valor_total <= 0:
+            continue
+        _dur = max(1, _item.mes_fim - _item.mes_inicio + 1)
+        _val = _item.valor_total / _dur
+        for _m in range(_item.mes_inicio, _item.mes_fim + 1):
+            if 0 <= _m < n:
+                outras_rec[_m] += _val
+
+    # ----- 9. CONSOLIDAR EM DATAFRAME -----
     df = pd.DataFrame({"Mes": meses})
 
     # Entradas
     df["Receita Nominal Venda"] = recebimentos_principal
     df["Receita Financeira (Juros)"] = recebimentos_juros
     df["Correcao Monetaria (Parcelas)"] = recebimentos_correcao
-    df["Total Entradas"] = recebimentos_com_correcao
+    df["Outras Receitas"] = outras_rec
+    df["Total Entradas"] = recebimentos_com_correcao + outras_rec
 
     # Saidas
     df["Aquisicao Terreno"] = desembolso_terreno
@@ -262,6 +293,7 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         "custo_comissao": float(comissao.sum()),
         "custo_impostos": float(impostos_vec.sum()),
         "custo_permuta_financeira": float(permuta_fin.sum()),
+        "outras_receitas_total": float(outras_rec.sum()),
 
         "total_saidas": float(df["Total Saidas"].sum()),
         "lucro_liquido": float(df["Saldo do Mes"].sum()),

@@ -78,9 +78,9 @@ def _renderizar_gestao() -> None:
 
     col_btn1, col_btn2 = st.columns([2, 3])
     with col_btn1:
-        if st.button("💾 Salvar na Biblioteca", key="btn_lib_salvar", use_container_width=True):
+        if st.button("Salvar na Biblioteca", key="btn_lib_salvar", width="stretch", icon=":material/save:"):
             _salvar_na_biblioteca(nome_lib.strip() or info.nome, projeto, resultado)
-            st.success(f"✅ '{nome_lib or info.nome}' adicionado a biblioteca.")
+            st.success(f"'{nome_lib or info.nome}' adicionado à biblioteca.")
             st.rerun()
 
     st.markdown("---")
@@ -113,16 +113,18 @@ def _renderizar_gestao() -> None:
             )
         with col_l:
             if st.button(
-                "📂", key=f"btn_lib_load_{i}",
+                "Carregar", key=f"btn_lib_load_{i}",
                 help="Carregar este projeto como projeto ativo",
-                use_container_width=True,
+                width="stretch",
+                icon=":material/folder_open:",
             ):
                 _carregar_da_biblioteca(i)
         with col_d:
             if st.button(
-                "🗑️", key=f"btn_lib_del_{i}",
+                "Remover", key=f"btn_lib_del_{i}",
                 help="Remover da biblioteca",
-                use_container_width=True,
+                width="stretch",
+                icon=":material/delete:",
             ):
                 biblioteca.pop(i)
                 st.session_state[CHAVE_BIBLIOTECA] = biblioteca
@@ -250,7 +252,7 @@ def _renderizar_consolidado_portfolio(biblioteca: list) -> None:
         tir_media = soma_pond / soma_vgv_pond
 
     with st.container(border=True):
-        st.markdown("#### 🗂️ Consolidado do Portfólio")
+        st.markdown("#### Consolidado do Portfólio")
         st.caption(
             f"{len(biblioteca)} projeto(s) na biblioteca — "
             f"{len(com_resultado)} calculado(s). TIR média ponderada pelo VGV."
@@ -270,7 +272,7 @@ def _renderizar_consolidado_portfolio(biblioteca: list) -> None:
 
         if total_vgv > 0 and total_lucro:
             margem_port = total_lucro / total_vgv
-            cor = "✅" if margem_port > 0.15 else "⚠️" if margem_port > 0 else "❌"
+            cor = "✓" if margem_port > 0.15 else "!" if margem_port > 0 else "✕"
             st.caption(
                 f"{cor} Margem consolidada sobre VGV: **{margem_port * 100:.1f}%**"
             )

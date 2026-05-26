@@ -40,7 +40,7 @@ def renderizar() -> None:
         5,
         "Impostos",
         "Regime tributario do empreendimento. "
-        "💾 Alteracoes salvas automaticamente.",
+        "Alterações salvas automaticamente.",
     )
 
     projeto = get_projeto()
@@ -50,7 +50,7 @@ def renderizar() -> None:
     # CARD 1 — REGIME TRIBUTARIO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 📑 Regime Tributario")
+        st.markdown("#### Regime Tributário")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -58,8 +58,8 @@ def renderizar() -> None:
                 "Regime de tributacao",
                 options=["lucro_presumido", "lucro_real"],
                 format_func=lambda x: {
-                    "lucro_presumido": "📋 Lucro Presumido (mais simples)",
-                    "lucro_real": "📊 Lucro Real (calculo individual de IRPJ/CSLL/PIS/COFINS)",
+                    "lucro_presumido": "Lucro Presumido (mais simples)",
+                    "lucro_real": "Lucro Real (cálculo individual de IRPJ/CSLL/PIS/COFINS)",
                 }[x],
                 index=0 if impostos.tributos.regime == "lucro_presumido" else 1,
                 key="aba5_regime",
@@ -80,7 +80,11 @@ def renderizar() -> None:
                 cofins = impostos.tributos.cofins
             else:
                 aliq_efetiva = impostos.tributos.aliquota_efetiva
-                st.markdown("**Aliquotas individuais (% sobre receita):**")
+                st.markdown(
+                    '<div style="font-size:10px;font-weight:600;letter-spacing:0.08em;'
+                    'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Alíquotas individuais (% sobre receita)</div>',
+                    unsafe_allow_html=True,
+                )
                 irpj = numero_brl("IRPJ", value=float(impostos.tributos.irpj),
                                   key="aba5_irpj", min_value=0.0)
                 csll = numero_brl("CSLL", value=float(impostos.tributos.csll),
@@ -97,8 +101,8 @@ def renderizar() -> None:
                 "Quando o imposto incide?",
                 options=["caixa", "competencia"],
                 format_func=lambda x: {
-                    "caixa": "💰 No recebimento (regime de caixa)",
-                    "competencia": "📅 Na venda (regime de competencia)",
+                    "caixa": "No recebimento (regime de caixa)",
+                    "competencia": "Na venda (regime de competência)",
                 }[x],
                 index=0 if impostos.tributos.regime_apuracao == "caixa" else 1,
                 help="Caixa: imposto cai quando o dinheiro entra. "
@@ -112,7 +116,7 @@ def renderizar() -> None:
     # ============================================================
     btn_proximo_modulo("Fluxo de Caixa")
 
-    # Auto-save
+    # Preparar objeto e checar alteracoes pendentes
     try:
         tributos_obj = Tributos(
             regime=regime,
@@ -120,15 +124,41 @@ def renderizar() -> None:
             irpj=irpj, csll=csll, pis=pis, cofins=cofins,
             regime_apuracao=regime_apur,
         )
+        st.session_state["_aba5_staged"] = tributos_obj
         atual_t = impostos.tributos
-        mudou = (
+        _dirty5 = (
             atual_t.regime != regime or
             atual_t.aliquota_efetiva != aliq_efetiva or
             atual_t.irpj != irpj or atual_t.csll != csll or
             atual_t.pis != pis or atual_t.cofins != cofins or
             atual_t.regime_apuracao != regime_apur
         )
-        if mudou:
-            _autosave_aba5(tributos_obj)
     except Exception:
-        pass
+        tributos_obj = impostos.tributos
+        _dirty5 = False
+
+    st.markdown("---")
+    _col_ind5, _col_btn5 = st.columns([3, 1])
+    with _col_ind5:
+        if _dirty5:
+            st.markdown(
+                '<div style="color:#F59E0B;font-size:12px;padding-top:6px;">'
+                '● Alterações não salvas</div>',
+                unsafe_allow_html=True,
+            )
+    with _col_btn5:
+        if st.button(
+            "Salvar aba",
+            key="aba5_salvar_aba",
+            type="primary" if _dirty5 else "secondary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            _autosave_aba5(tributos_obj)
+
+
+def sincronizar_aba5() -> None:
+    """Salva o estado da Aba 5 no projeto (chamado pelo sidebar antes de Calcular)."""
+    staged = st.session_state.get("_aba5_staged")
+    if staged is not None:
+        _autosave_aba5(staged)

@@ -23,7 +23,7 @@ class Pendencia:
 
     @property
     def icone(self) -> str:
-        return {"erro": "❌", "aviso": "⚠️", "dica": "💡"}.get(self.tipo, "•")
+        return {"erro": "✕", "aviso": "!", "dica": "›"}.get(self.tipo, "·")
 
 
 def validar_projeto_completo(projeto) -> list[Pendencia]:
@@ -102,45 +102,43 @@ def _validar_aba2(projeto) -> list[Pendencia]:
     out = []
     receitas = projeto.receitas
 
-    if not receitas.fluxos_recebiveis:
-        out.append(Pendencia("erro", 2, "Cadastre pelo menos um fluxo de recebiveis."))
+    if not receitas.fluxos_tipologia:
+        out.append(Pendencia("erro", 2, "Configure o fluxo de recebiveis para cada tipologia."))
 
-    # Validar soma de cada fluxo
-    for f in receitas.fluxos_recebiveis:
-        soma = (
-            f.percentual_sinal + f.percentual_obra
-            + f.percentual_baloes + f.percentual_financiamento
-        )
-        if abs(soma - 100.0) > 0.01:
+    for ft in receitas.fluxos_tipologia:
+        # Soma do fluxo
+        if abs(ft.soma_fluxo - 100.0) > 0.01:
             out.append(Pendencia(
                 "erro", 2,
-                f"Fluxo '{f.nome}': percentuais somam {soma:.1f}% (deveria ser 100%)."
+                f"Tipologia '{ft.nome_tipologia}': percentuais do fluxo somam "
+                f"{ft.soma_fluxo:.1f}% (deveria ser 100%)."
             ))
 
-    # Validar soma da curva
-    if receitas.curva_vendas:
-        soma_curva = sum(f.percentual_estoque for f in receitas.curva_vendas)
-        if abs(soma_curva - 100.0) > 0.01:
+        # Soma da curva de vendas
+        if ft.soma_curva < 0.01:
             out.append(Pendencia(
                 "erro", 2,
-                f"Curva de vendas soma {soma_curva:.1f}% (deveria ser 100%)."
+                f"Tipologia '{ft.nome_tipologia}': curva de vendas vazia."
             ))
-    else:
-        out.append(Pendencia("erro", 2, "Curva de vendas vazia. Preencha quando vai vender."))
+        elif abs(ft.soma_curva - 100.0) > 0.01:
+            out.append(Pendencia(
+                "aviso", 2,
+                f"Tipologia '{ft.nome_tipologia}': curva de vendas soma "
+                f"{ft.soma_curva:.1f}% (esperado 100%)."
+            ))
 
-    # Plausibilidade: sinal muito baixo ou muito alto
-    for f in receitas.fluxos_recebiveis:
-        if f.percentual_sinal < 5:
+        # Plausibilidade sinal
+        if ft.percentual_sinal < 5:
             out.append(Pendencia(
                 "dica", 2,
-                f"Fluxo '{f.nome}': entrada de {f.percentual_sinal:.0f}% e baixa. "
-                "Praticas de mercado: 5-20% de entrada."
+                f"Tipologia '{ft.nome_tipologia}': entrada de {ft.percentual_sinal:.0f}% "
+                "e baixa. Praticas de mercado: 5-20%."
             ))
-        if f.percentual_sinal > 30:
+        if ft.percentual_sinal > 30:
             out.append(Pendencia(
                 "dica", 2,
-                f"Fluxo '{f.nome}': entrada de {f.percentual_sinal:.0f}% e alta para o "
-                "mercado de loteamentos. Verifique."
+                f"Tipologia '{ft.nome_tipologia}': entrada de {ft.percentual_sinal:.0f}% "
+                "e alta para loteamentos. Verifique."
             ))
 
     return out

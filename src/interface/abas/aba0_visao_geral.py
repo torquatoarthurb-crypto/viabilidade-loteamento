@@ -36,15 +36,15 @@ def renderizar() -> None:
     # ============================================================
     # CABECALHO + BOTOES DE EXPORTAR
     # ============================================================
-    col_titulo, col_btns = st.columns([3, 2])
+    col_titulo, col_btns = st.columns([5, 2])
     with col_titulo:
         renderizar_titulo_modulo("Visao Geral", numero=0)
 
     with col_btns:
-        st.markdown('<div style="height: 32px;"></div>', unsafe_allow_html=True)
+        st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            st.button("📊 Exportar Excel", use_container_width=True,
+            st.button("Exportar Excel", width="stretch",
                       help="Use o botao na sidebar para baixar")
         with c2:
             # UX-09B: conectar botao PDF ao HTML export
@@ -57,21 +57,21 @@ def renderizar() -> None:
                     )
                     html_bytes = gerar_relatorio_html(projeto, resultado).encode("utf-8")
                     st.download_button(
-                        "📄 Exportar PDF (Comite)",
+                        "Exportar PDF (Comitê)",
                         data=html_bytes,
                         file_name=f"relatorio_{nome_padrao}.html",
                         mime="text/html",
-                        use_container_width=True,
+                        width="stretch",
                         type="primary",
                         help="Baixa HTML. Abra no navegador e pressione Ctrl+P para salvar como PDF.",
                     )
                 except Exception as e:
-                    st.button("📄 Exportar PDF (Comite)",
-                              use_container_width=True, type="primary",
+                    st.button("Exportar PDF (Comitê)",
+                              width="stretch", type="primary",
                               disabled=True, help=f"Erro ao gerar relatorio: {e}")
             else:
-                st.button("📄 Exportar PDF (Comite)",
-                          use_container_width=True, type="primary",
+                st.button("Exportar PDF (Comitê)",
+                          width="stretch", type="primary",
                           disabled=True, help="Calcule o projeto primeiro para habilitar")
 
     # ============================================================
@@ -126,10 +126,10 @@ def renderizar() -> None:
     if resultado is None:
         # D3: estimativas pre-calculo
         st.markdown(
-            '<div style="background:rgba(251,191,36,0.1);border-left:3px solid #FBBF24;'
-            'padding:8px 12px;border-radius:0 4px 4px 0;font-size:12px;color:#FBBF24;'
-            'margin:12px 0;">'
-            '⚠️ Estimativas antes do calculo — dados precisos apos Calcular</div>',
+            '<div style="background:rgba(176,125,46,0.07);border-left:2px solid var(--accent-300);'
+            'padding:6px 12px;border-radius:0 4px 4px 0;font-size:11px;color:var(--accent-500);'
+            'margin:8px 0;">'
+            'Estimativas antes do cálculo — dados precisos após Calcular</div>',
             unsafe_allow_html=True,
         )
         try:
@@ -176,11 +176,9 @@ def renderizar() -> None:
         except Exception:
             pass
 
-        st.info(
-            "💡 Clique em **'Calcular viabilidade'** na sidebar "
-            "para ver os indicadores completos.  \n"
-            "🏡 Lembre-se de configurar a **Aquisição do Terreno** (sidebar → Dados) "
-            "antes de calcular."
+        st.caption(
+            "Clique em **Calcular viabilidade** na sidebar para ver os indicadores completos. "
+            "Configure a Aquisição do Terreno antes de calcular."
         )
         return
 
@@ -206,30 +204,36 @@ def renderizar() -> None:
         tir_pct = tir * 100
         if tir_pct >= tma * 1.1:
             tir_cor = "verde"
-            tir_sub = f"✅ Acima da TMA ({tma:.0f}% a.a.)"
+            tir_sub = f"Acima da TMA ({tma:.0f}% a.a.)"
         elif tir_pct >= tma:
             tir_cor = "verde"
-            tir_sub = f"✅ Acima da TMA ({tma:.0f}% a.a.)"
+            tir_sub = f"Acima da TMA ({tma:.0f}% a.a.)"
         elif tir_pct >= tma * 0.85:
             tir_cor = "neutro"
-            tir_sub = f"⚠️ Próxima da TMA ({tma:.0f}% a.a.)"
+            tir_sub = f"Próxima da TMA ({tma:.0f}% a.a.)"
         else:
             tir_cor = "vermelho"
-            tir_sub = f"❌ Abaixo da TMA ({tma:.0f}% a.a.)"
+            tir_sub = f"Abaixo da TMA ({tma:.0f}% a.a.)"
     else:
         tir_cor = "neutro"
         tir_sub = ""
 
     # UX-08: veredito VPL
     vpl_cor = "verde" if vpl > 0 else "vermelho"
-    vpl_sub = "✅ Projeto viavel" if vpl > 0 else "❌ Projeto inviavel"
+    vpl_sub = "Projeto viável" if vpl > 0 else "Projeto inviável"
 
     # UX-13: payback com referencia ao horizonte
     pb_valor = f"M{pb}" if pb else "—"
     pb_sub = f"de {horizonte} meses no projeto" if (pb and horizonte > 0) else ""
 
-    kpis = [
-        # Linha 1
+    _LABEL_SECAO = (
+        '<div style="margin:16px 0 8px;font-size:10px;font-weight:600;'
+        'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
+        '{}</div>'
+    )
+
+    st.markdown(_LABEL_SECAO.format("Retorno"), unsafe_allow_html=True)
+    renderizar_grade_kpis([
         {
             "label": "VGV Disponivel",
             "valor": fmt_milhao(vgv_disponivel),
@@ -251,7 +255,10 @@ def renderizar() -> None:
             "sub": tir_sub,
             "cor": tir_cor,
         },
-        # Linha 2
+    ])
+
+    st.markdown(_LABEL_SECAO.format("Risco e Liquidez"), unsafe_allow_html=True)
+    renderizar_grade_kpis([
         {
             "label": f"VPL ({tma:.0f}% a.a.)",
             "valor": fmt_milhao(vpl),
@@ -276,18 +283,16 @@ def renderizar() -> None:
             "sub": "do VGV",
             "cor": "neutro",
         },
-    ]
-
-    renderizar_grade_kpis(kpis)
+    ])
 
     # UX-11: aviso de reajustes nao ativados
     if not projeto.reajustes.ativo:
         st.markdown(
-            '<div style="background:rgba(96,165,250,0.08);border-left:3px solid #60A5FA;'
-            'padding:8px 12px;border-radius:0 4px 4px 0;font-size:12px;color:#93C5FD;'
+            '<div style="background:rgba(58,110,168,0.07);border-left:2px solid var(--blue);'
+            'padding:6px 12px;border-radius:0 4px 4px 0;font-size:11px;color:var(--blue);'
             'margin:16px 0 0 0;">'
-            '💡 <b>Reajustes monetários não ativados</b> — o custo de obras pode estar '
-            'subestimado sem a correção pelo INCC. Configure no '
-            '<b>Reajustes</b> (sidebar → Avançado → Reajustes).</div>',
+            '<b>Reajustes monetários não ativados</b> — o custo de obras pode estar '
+            'subestimado sem a correção pelo INCC. Configure em '
+            '<b>Reajustes</b> (sidebar → Avançado).</div>',
             unsafe_allow_html=True,
         )

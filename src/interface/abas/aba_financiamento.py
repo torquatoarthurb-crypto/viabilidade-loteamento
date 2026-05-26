@@ -49,7 +49,7 @@ def _autosave(
 def _renderizar_comparativo(resumo: dict, formatar_brl) -> None:
     """Tabela comparativa sem financiamento x com financiamento."""
     with st.container(border=True):
-        st.markdown("#### 📊 Impacto do Financiamento")
+        st.markdown("#### Impacto do Financiamento")
 
         def fmt_pct(v):
             return f"{v * 100:.2f}%" if v is not None else "—"
@@ -109,12 +109,12 @@ def _renderizar_comparativo(resumo: dict, formatar_brl) -> None:
             st.metric("Saldo devedor máximo", formatar_brl(devedor_max))
             if devedor_final > 1:
                 st.warning(
-                    f"⚠️ Saldo devedor remanescente ao fim do horizonte: "
+                    f"Saldo devedor remanescente ao fim do horizonte: "
                     f"**{formatar_brl(devedor_final)}**. "
                     f"Aumente o limite ou estenda o horizonte do projeto."
                 )
             else:
-                st.success("✅ Dívida quitada dentro do horizonte do projeto.")
+                st.success("Dívida quitada dentro do horizonte do projeto.")
 
 
 def renderizar() -> None:
@@ -139,7 +139,7 @@ def renderizar() -> None:
         horizonte = r.get("horizonte_meses", 0)
 
         with st.container(border=True):
-            st.markdown("#### 🔍 Por que usar financiamento?")
+            st.markdown("#### Por que usar financiamento?")
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.metric(
@@ -155,13 +155,13 @@ def renderizar() -> None:
             if exp_max > 500_000:
                 nivel = "alta" if exp_max > 5_000_000 else "moderada"
                 st.info(
-                    f"💡 A exposição de capital é **{nivel}** ({formatar_brl(-exp_max)}). "
+                    f"A exposição de capital é **{nivel}** ({formatar_brl(-exp_max)}). "
                     "Financiar parte desse montante pode melhorar o retorno sobre o "
                     "capital próprio (ROE) e reduzir o risco do projeto."
                 )
     else:
         st.info(
-            "💡 Calcule o fluxo de caixa primeiro para ver a exposição do projeto "
+            "Calcule o fluxo de caixa primeiro para ver a exposição do projeto "
             "e entender o quanto o financiamento pode ajudar."
         )
 
@@ -171,7 +171,7 @@ def renderizar() -> None:
     # TAXA DE JUROS — sempre visivel (usada na previsao do Dashboard)
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 💰 Taxa de juros do financiamento")
+        st.markdown("#### Taxa de juros do financiamento")
         st.caption(
             "A taxa abaixo fica sempre visível e alimenta a **estimativa do Dashboard**, "
             "mesmo quando o financiamento está desativado. "
@@ -226,7 +226,7 @@ def renderizar() -> None:
     # CARD 1 — CONFIGURACAO DA LINHA DE CREDITO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🏦 Configuração completa da linha de crédito — CCB/CCE")
+        st.markdown("#### Configuração completa da linha de crédito — CCB/CCE")
         st.caption("Limite, carência, comissão e IOF da operação bancária.")
 
         col1, col2 = st.columns(2)
@@ -272,7 +272,7 @@ def renderizar() -> None:
     # CARD 2 — CAIXA MINIMO (reserva operacional)
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🛡️ Reserva de caixa mínimo")
+        st.markdown("#### Reserva de caixa mínimo")
         st.caption(
             "Define um piso de caixa que o sistema mantém disponível o tempo todo. "
             "O banco saca para cobrir qualquer queda abaixo desse valor (não só quando o caixa vai a zero). "
@@ -294,7 +294,7 @@ def renderizar() -> None:
 
         if caixa_minimo > 0:
             st.info(
-                f"📌 Com caixa mínimo de **{formatar_brl(caixa_minimo)}**, o sistema vai sacar "
+                f"Com caixa mínimo de **{formatar_brl(caixa_minimo)}**, o sistema vai sacar "
                 "mais da linha de crédito (para cobrir o buffer) e amortizar mais devagar "
                 "(preservando a reserva). Isso aumenta o custo do financiamento, mas reduz o "
                 "risco operacional do projeto."
@@ -306,7 +306,7 @@ def renderizar() -> None:
     # CARD 3 — GATILHOS DE LIBERACAO DO FINANCIAMENTO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 🔓 Gatilho de liberação do financiamento")
+        st.markdown("#### Gatilho de liberação do financiamento")
         st.caption(
             "Define a condição para que o sistema comece a sacar da linha de crédito. "
             "Útil para refletir exigências do banco (ex.: só libera após X% de obras executadas)."
@@ -355,13 +355,13 @@ def renderizar() -> None:
             st.caption("✓ Linha liberada desde M0 — o sistema saca sempre que o caixa cair abaixo do mínimo.")
         elif gatilho_tipo == "ambos":
             st.info(
-                f"📌 A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido "
+                f"A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido "
                 f"**e** **{gatilho_obras_pct:.0f}% das obras** sejam executadas ao mesmo tempo."
             )
         elif gatilho_tipo == "vendas":
-            st.info(f"📌 A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido.")
+            st.info(f"A linha ficará bloqueada até que **{gatilho_vendas_pct:.0f}% do VGV** seja vendido.")
         elif gatilho_tipo == "obras":
-            st.info(f"📌 A linha ficará bloqueada até que **{gatilho_obras_pct:.0f}% das obras** sejam executadas.")
+            st.info(f"A linha ficará bloqueada até que **{gatilho_obras_pct:.0f}% das obras** sejam executadas.")
 
     # Auto-save
     _autosave(

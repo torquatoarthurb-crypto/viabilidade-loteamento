@@ -234,7 +234,11 @@ def _renderizar_cards_margem(r: dict, ind: dict) -> None:
         },
     ]
 
-    st.markdown("#### Indicadores de Rentabilidade")
+    st.markdown(
+        '<div style="margin:16px 0 8px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
+        'text-transform:uppercase;color:var(--stone-500);">Indicadores de Rentabilidade</div>',
+        unsafe_allow_html=True,
+    )
     renderizar_grade_kpis(kpis)
 
 
@@ -243,7 +247,11 @@ def _renderizar_cards_margem(r: dict, ind: dict) -> None:
 # =====================================================================
 
 def _renderizar_composicao_saidas(r: dict) -> None:
-    st.markdown("#### Composicao das Saidas")
+    st.markdown(
+        '<div style="margin:4px 0 8px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
+        'text-transform:uppercase;color:var(--stone-500);">Composição das Saídas</div>',
+        unsafe_allow_html=True,
+    )
 
     categorias_raw = [
         ("Terreno", r["custo_terreno_aquisicao"] + r["custo_terreno_cartorio"]),
@@ -270,7 +278,7 @@ def _renderizar_composicao_saidas(r: dict) -> None:
         "#7B5EA7", "#8A8880", "#C49A3C", "#C05454", "#2E6B47",
     ]
 
-    col_grafico, col_tabela = st.columns([2, 3])
+    col_grafico, col_tabela = st.columns([1, 1])
 
     with col_grafico:
         fig = go.Figure(go.Pie(
@@ -291,9 +299,11 @@ def _renderizar_composicao_saidas(r: dict) -> None:
             legend=dict(
                 bgcolor="#F5F3EE",
                 bordercolor="#D8D4C8",
-                borderwidth=1,
-                font=dict(size=11),
-                orientation="v",
+                borderwidth=0,
+                font=dict(size=10),
+                orientation="h",
+                x=0,
+                y=-0.18,
             ),
             hoverlabel=dict(bgcolor="#ECEAE4", font_size=12, font_color="#1A1916"),
             height=320,
@@ -355,7 +365,11 @@ def _renderizar_nominal_vs_financeiro(r: dict) -> None:
     if receita_financeira < 1:
         return
 
-    st.markdown("#### Receita Nominal vs Receita Financeira")
+    st.markdown(
+        '<div style="margin:4px 0 8px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
+        'text-transform:uppercase;color:var(--stone-500);">Receita Nominal vs Receita Financeira</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(
         "A receita financeira sao os juros embutidos nas parcelas (sistema Price). "
         "O resultado nominal e o lucro sobre o VGV; o resultado total inclui esses juros."

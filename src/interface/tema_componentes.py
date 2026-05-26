@@ -10,7 +10,6 @@ Componentes visuais Altiplano:
 
 from __future__ import annotations
 
-import base64
 import streamlit as st
 
 
@@ -37,8 +36,7 @@ _LOGO_SVG_ESCURO = (
 )
 
 def _svg_img(svg: str) -> str:
-    b64 = base64.b64encode(svg.encode()).decode()
-    return f'<img src="data:image/svg+xml;base64,{b64}" style="display:block;">'
+    return svg
 
 _LOGO_IMG_CLARO  = _svg_img(_LOGO_SVG_CLARO)
 _LOGO_IMG_ESCURO = _svg_img(_LOGO_SVG_ESCURO)
@@ -289,21 +287,23 @@ def renderizar_navegacao_modulos_sidebar(
             icone = m.get("icone", "·")
             simb = _simb(m.get("status", "neutro"))
             prefixo = f"{passo}. " if numerado else ""
-            label = f"{icone} {prefixo}{nome}{simb}"
+            label = f"{prefixo}{nome}{simb}"
             is_active = (i == modulo_atual_idx)
 
             if is_active:
                 st.sidebar.button(
                     label,
                     key=f"nav_btn_{m['numero']}",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=True,
+                    icon=icone,
                 )
             else:
                 if st.sidebar.button(
                     label,
                     key=f"nav_btn_{m['numero']}",
-                    use_container_width=True,
+                    width="stretch",
+                    icon=icone,
                 ):
                     novo_idx = i
 

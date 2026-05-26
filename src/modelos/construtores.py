@@ -17,7 +17,7 @@ from .desenvolvimento import Aba4Desenvolvimento, Administracao
 from .financeiro import AquisicaoTerreno, ParametrosFinanceiros
 from .obras import Aba3Obras, EtapaObra
 from .projeto import Projeto
-from .receitas import Aba2Receitas, FaixaCurvaVendas, FluxoRecebiveis
+from .receitas import Aba2Receitas, FluxoTipologia
 from .terreno import (
     Aba1Terreno,
     DatasProjeto,
@@ -85,9 +85,9 @@ def projeto_novo() -> Projeto:
         receitas=Aba2Receitas(
             tipo_permuta="sem_permuta",
             permuta_fisica=[],
-            fluxos_recebiveis=[
-                FluxoRecebiveis(
-                    nome="Fluxo Padrao",
+            fluxos_tipologia=[
+                FluxoTipologia(
+                    nome_tipologia="Lote Padrao",
                     percentual_sinal=10,
                     qtd_parcelas_sinal=1,
                     percentual_obra=30,
@@ -97,20 +97,13 @@ def projeto_novo() -> Projeto:
                     percentual_financiamento=50,
                     qtd_parcelas_financiamento=120,
                     juros_financiamento_am=1.0,
-                ),
-            ],
-            curva_vendas=[
-                FaixaCurvaVendas(
-                    mes_inicio=9,
-                    mes_fim=20,
-                    percentual_estoque=60,
-                    fluxo_recebiveis="Fluxo Padrao",
-                ),
-                FaixaCurvaVendas(
-                    mes_inicio=21,
-                    mes_fim=35,
-                    percentual_estoque=40,
-                    fluxo_recebiveis="Fluxo Padrao",
+                    curva_mensal={
+                        m: round(60 / 12, 4) for m in range(9, 21)
+                        # 60% distribuido entre M9-M20 (lancamento e obras)
+                    } | {
+                        m: round(40 / 15, 4) for m in range(21, 36)
+                        # 40% distribuido entre M21-M35 (fim das obras)
+                    },
                 ),
             ],
         ),

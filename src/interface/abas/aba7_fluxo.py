@@ -74,9 +74,9 @@ def _renderizar_memoria_calculo(r: dict, ind: dict, projeto) -> None:
             f"Resultado: **{formatar_brl(vpl)}**"
         )
         if vpl > 0:
-            st.caption("✅ VPL positivo — projeto cria valor acima da TMA")
+            st.caption("VPL positivo — projeto cria valor acima da TMA")
         else:
-            st.caption("❌ VPL negativo — retorno abaixo da TMA")
+            st.caption("VPL negativo — retorno abaixo da TMA")
     with col_tir:
         st.markdown("**TIR**")
         tir = ind.get("tir_anual")
@@ -88,9 +88,9 @@ def _renderizar_memoria_calculo(r: dict, ind: dict, projeto) -> None:
             )
             diff = tir * 100 - tma_aa
             if diff >= 0:
-                st.caption(f"✅ Spread: +{diff:.2f} p.p. acima da TMA")
+                st.caption(f"Spread: +{diff:.2f} p.p. acima da TMA")
             else:
-                st.caption(f"❌ Spread: {diff:.2f} p.p. abaixo da TMA")
+                st.caption(f"Spread: {diff:.2f} p.p. abaixo da TMA")
         else:
             st.caption("TIR nao encontrada (fluxo sem inversao de sinal)")
     with col_pb:
@@ -128,7 +128,7 @@ def renderizar() -> None:
     # TMA
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### 📉 Taxa Minima de Atratividade (TMA)")
+        st.markdown("#### Taxa Mínima de Atratividade (TMA)")
         st.caption(
             "Taxa anual usada para descontar o fluxo no calculo do **VPL** "
             "(Valor Presente Liquido) e do **payback descontado**. "
@@ -150,17 +150,36 @@ def renderizar() -> None:
             )
         with col2:
             tma_mensal = (1 + tma_anual / 100) ** (1 / 12) - 1
+            st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
             st.metric("Equivalente mensal", f"{tma_mensal*100:.4f} % a.m.")
 
-    # Auto-save
-    if abs(parametros.tma_anual - tma_anual) > 0.001:
-        _autosave_tma(tma_anual)
+    # Staged + save button
+    st.session_state["_aba7_staged"] = tma_anual
+    _dirty7 = abs(parametros.tma_anual - tma_anual) > 0.001
+
+    _col_ind7, _col_btn7 = st.columns([3, 1])
+    with _col_ind7:
+        if _dirty7:
+            st.markdown(
+                '<div style="color:#F59E0B;font-size:12px;padding-top:6px;">'
+                '● Alterações não salvas</div>',
+                unsafe_allow_html=True,
+            )
+    with _col_btn7:
+        if st.button(
+            "Salvar",
+            key="aba7_salvar_tma",
+            type="primary" if _dirty7 else "secondary",
+            width="stretch",
+            icon=":material/save:",
+        ):
+            _autosave_tma(tma_anual)
 
     # ============================================================
     # RESULTADO RAPIDO
     # ============================================================
     st.markdown("---")
-    st.markdown("#### 📋 Resumo do Fluxo")
+    st.markdown("#### Resumo do Fluxo")
 
     resultado = get_resultado()
     if resultado is None:
@@ -178,14 +197,20 @@ def renderizar() -> None:
     if tir_anual is not None:
         tir_pct = tir_anual * 100
         if tir_pct >= tma:
-            tir_delta = f"✅ +{tir_pct - tma:.1f} p.p. acima da TMA"
+            tir_delta = f"+{tir_pct - tma:.1f} p.p. acima da TMA"
         else:
-            tir_delta = f"❌ {tir_pct - tma:.1f} p.p. abaixo da TMA"
+            tir_delta = f"{tir_pct - tma:.1f} p.p. abaixo da TMA"
     else:
         tir_delta = None
 
-    vpl_delta = "✅ Viavel" if vpl > 0 else "❌ Inviavel"
+    vpl_delta = "Viável" if vpl > 0 else "Inviável"
 
+    st.markdown(
+        '<div style="margin:4px 0 8px;font-size:10px;font-weight:600;'
+        'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
+        'Retorno</div>',
+        unsafe_allow_html=True,
+    )
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(
@@ -214,6 +239,12 @@ def renderizar() -> None:
             help="Taxa Interna de Retorno anual — taxa que zera o VPL. Calculada por Newton-Raphson. Compare com a TMA para decidir a viabilidade.",
         )
 
+    st.markdown(
+        '<div style="margin:16px 0 8px;font-size:10px;font-weight:600;'
+        'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
+        'Risco e Liquidez</div>',
+        unsafe_allow_html=True,
+    )
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(
@@ -242,10 +273,17 @@ def renderizar() -> None:
             help="Mês em que o saldo acumulado descontado pela TMA cruza o zero. Mais conservador que o simples — considera o custo de oportunidade do capital ao longo do tempo.",
         )
 
-    with st.expander("🔍 Memória de Cálculo", expanded=False):
+    with st.expander("Memória de Cálculo", expanded=False):
         _renderizar_memoria_calculo(r, ind, projeto)
 
     from .aba8_dashboard import _tabela_fluxo_mensal
     _tabela_fluxo_mensal(resultado.fluxo_caixa)
 
     btn_proximo_modulo("Ferramentas")
+
+
+def sincronizar_aba7() -> None:
+    """Salva a TMA no projeto (chamado pelo sidebar antes de Calcular)."""
+    tma = st.session_state.get("_aba7_staged")
+    if tma is not None:
+        _autosave_tma(float(tma))

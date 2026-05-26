@@ -272,7 +272,7 @@ def renderizar() -> None:
                 entrar = st.form_submit_button(
                     "Entrar →",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             if entrar:
@@ -323,7 +323,7 @@ def renderizar() -> None:
                 cadastrar_btn = st.form_submit_button(
                     "Criar conta →",
                     type="primary",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             if cadastrar_btn:
@@ -342,7 +342,7 @@ def renderizar() -> None:
         # Nota de privacidade
         st.markdown(
             '<div class="login-privacy">'
-            '🔒 Seus dados ficam armazenados localmente.<br>'
+            'Seus dados ficam armazenados localmente.<br>'
             'A Altiplano não acessa informações dos seus projetos.'
             '</div>',
             unsafe_allow_html=True,

@@ -505,39 +505,24 @@ def _aba_receitas(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -
     df  = resultado.fluxo_caixa
     linha = _titulo_projeto(ws, projeto)
 
-    linha = _sec(ws, linha, "FLUXOS DE RECEBIVEIS", ncols=3)
-    for fl in rec.fluxos_recebiveis:
-        linha = _sub(ws, linha, fl.nome, ncols=3)
-        linha = _kv(ws, linha, "  Sinal",                fl.percentual_sinal,          _FMT_NUM, unit="%")
-        linha = _kv(ws, linha, "    Parcelas de sinal",  fl.qtd_parcelas_sinal,         _FMT_INT, unit="parcelas")
-        linha = _kv(ws, linha, "  Parcelas durante obra", fl.percentual_obra,           _FMT_NUM, unit="%")
-        linha = _kv(ws, linha, "    Juros parcelas obra", fl.juros_parcelas_obra_am,    _FMT_NUM, unit="% a.m.")
-        linha = _kv(ws, linha, "  Baloes anuais",         fl.percentual_baloes,         _FMT_NUM, unit="%")
-        linha = _kv(ws, linha, "    Qtd baloes",          fl.qtd_baloes,                _FMT_INT)
-        linha = _kv(ws, linha, "  Financiamento pos-obra", fl.percentual_financiamento, _FMT_NUM, unit="%")
-        linha = _kv(ws, linha, "    Parcelas financiamento", fl.qtd_parcelas_financiamento, _FMT_INT)
-        linha = _kv(ws, linha, "    Juros financiamento", fl.juros_financiamento_am,    _FMT_NUM, unit="% a.m.")
-        soma = fl.percentual_sinal + fl.percentual_obra + fl.percentual_baloes + fl.percentual_financiamento
+    linha = _sec(ws, linha, "FLUXOS DE RECEBIVEIS POR TIPOLOGIA", ncols=3)
+    for ft in rec.fluxos_tipologia:
+        linha = _sub(ws, linha, ft.nome_tipologia, ncols=3)
+        linha = _kv(ws, linha, "  Sinal",                ft.percentual_sinal,          _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Parcelas de sinal",  ft.qtd_parcelas_sinal,         _FMT_INT, unit="parcelas")
+        linha = _kv(ws, linha, "  Parcelas durante obra", ft.percentual_obra,           _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Juros parcelas obra", ft.juros_parcelas_obra_am,    _FMT_NUM, unit="% a.m.")
+        linha = _kv(ws, linha, "  Baloes anuais",         ft.percentual_baloes,         _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Qtd baloes",          ft.qtd_baloes,                _FMT_INT)
+        linha = _kv(ws, linha, "  Financiamento pos-obra", ft.percentual_financiamento, _FMT_NUM, unit="%")
+        linha = _kv(ws, linha, "    Parcelas financiamento", ft.qtd_parcelas_financiamento, _FMT_INT)
+        linha = _kv(ws, linha, "    Juros financiamento", ft.juros_financiamento_am,    _FMT_NUM, unit="% a.m.")
+        soma = ft.soma_fluxo
         linha = _kv(ws, linha, "  SOMA (deve ser 100%)", soma, _FMT_NUM, bold=True,
                     cor_val=_C_GREEN if abs(soma - 100) < 0.01 else _C_RED)
+        linha = _kv(ws, linha, "  Soma curva de vendas (%)", ft.soma_curva, _FMT_NUM,
+                    cor_val=_C_GREEN if abs(ft.soma_curva - 100) < 0.01 else _C_RED)
         linha += 1
-
-    linha = _sec(ws, linha, "CURVA DE VENDAS", ncols=3)
-    ws.cell(linha, 1, "Faixa").font = _F_B10
-    ws.cell(linha, 2, "Mes Ini / Fim").font = _F_B10
-    ws.cell(linha, 3, "% Estoque / Fluxo").font = _F_B10
-    for col in (1, 2, 3):
-        ws.cell(linha, col).fill = _fill(_C_STONE_D)
-    linha += 1
-    for i, faixa in enumerate(rec.curva_vendas, start=1):
-        ws.cell(linha, 1, f"Faixa {i}").font = _F_N10
-        ws.cell(linha, 2, f"M{faixa.mes_inicio} – M{faixa.mes_fim}").font = _F_N10
-        fator_str = f"  |  Fator {faixa.fator_preco:.2f}x" if abs(faixa.fator_preco - 1.0) > 0.001 else ""
-        ws.cell(linha, 3, f"{faixa.percentual_estoque:.1f}%  |  {faixa.fluxo_recebiveis}{fator_str}").font = _F_N10
-        linha += 1
-    soma_cv = sum(f.percentual_estoque for f in rec.curva_vendas)
-    linha = _kv(ws, linha, "SOMA CURVA (deve ser 100%)", soma_cv, _FMT_NUM, bold=True,
-                cor_val=_C_GREEN if abs(soma_cv - 100) < 0.01 else _C_RED)
 
     # Permuta
     linha += 1
@@ -939,15 +924,19 @@ def _aba_verificacao_receitas(
 
     vgv_vendavel = calcular_vgv_vendavel(terreno, receitas)
     mes_termino  = meses_entre(terreno.datas.inicio_projeto, terreno.datas.termino_obras)
-    mapa_fluxos  = {f.nome: f for f in receitas.fluxos_recebiveis}
 
     mapa_permuta: dict[str, float] = {}
     if receitas.tipo_permuta == "fisica":
         mapa_permuta = {p.tipologia: p.percentual for p in receitas.permuta_fisica}
+    mapa_tipologias = {t.nome: t for t in terreno.tipologias}
     total_lotes_vendaveis = sum(
         tip.quantidade * (1 - mapa_permuta.get(tip.nome, 0.0) / 100)
         for tip in terreno.tipologias
     )
+
+    # Novo formato: usa fluxos_tipologia; legado: usa fluxos_recebiveis + curva_vendas
+    usa_novo_formato = bool(receitas.fluxos_tipologia)
+    mapa_fluxos = {ft.nome_tipologia: ft.as_fluxo_recebiveis() for ft in receitas.fluxos_tipologia} if usa_novo_formato else {f.nome: f for f in receitas.fluxos_recebiveis}
 
     _hdr(ws, 1, 1, "VERIFICACAO DE RECEITAS — FLUXO DETALHADO POR MES DE VENDA",
          _C_DARK, fonte=_F_W11, ncols=6, height=24)
@@ -974,68 +963,86 @@ def _aba_verificacao_receitas(
     total_juros     = 0.0
     total_valor     = 0.0
 
-    for faixa in receitas.curva_vendas:
-        if faixa.fluxo_recebiveis not in mapa_fluxos:
-            continue
-        fluxo = mapa_fluxos[faixa.fluxo_recebiveis]
-        qtd_meses = max(1, faixa.mes_fim - faixa.mes_inicio + 1)
-        vgv_por_mes  = vgv_vendavel * (faixa.percentual_estoque / 100) * faixa.fator_preco / qtd_meses
-        lotes_por_mes = total_lotes_vendaveis * (faixa.percentual_estoque / 100) / qtd_meses
+    def _escrever_venda(fluxo, mes_venda: int, vgv_por_mes: float, lotes_por_mes: float) -> None:
+        nonlocal linha, total_principal, total_juros, total_valor
+        eventos = _detalhar_venda(vgv_por_mes, mes_venda, fluxo, mes_termino)
+        if not eventos:
+            return
 
-        for mes_venda in range(faixa.mes_inicio, faixa.mes_fim + 1):
-            eventos = _detalhar_venda(vgv_por_mes, mes_venda, fluxo, mes_termino)
-            if not eventos:
-                continue
+        sub_valor     = sum(e["valor"]     for e in eventos)
+        sub_principal = sum(e["principal"] for e in eventos)
+        sub_juros     = sum(e["juros"]     for e in eventos)
 
-            sub_valor     = sum(e["valor"]     for e in eventos)
-            sub_principal = sum(e["principal"] for e in eventos)
-            sub_juros     = sum(e["juros"]     for e in eventos)
+        partes = [f"M{mes_venda}", f"Fluxo: {fluxo.nome}",
+                  f"VGV: {_rs(vgv_por_mes)}", f"Lotes: {lotes_por_mes:.3f}"]
+        if sub_juros > 0.01:
+            partes.append(f"Juros: {_rs(sub_juros)}")
+        cel = ws.cell(linha, 1, "   ".join(partes))
+        cel.font = _F_W10
+        cel.fill = _fill(_C_OCHRE)
+        ws.merge_cells(f"A{linha}:F{linha}")
+        ws.row_dimensions[linha].height = 18
+        linha += 1
 
-            # Cabecalho da venda
-            partes = [f"M{mes_venda}", f"Fluxo: {fluxo.nome}",
-                      f"VGV: {_rs(vgv_por_mes)}", f"Lotes: {lotes_por_mes:.3f}"]
-            if sub_juros > 0.01:
-                partes.append(f"Juros: {_rs(sub_juros)}")
-            cel = ws.cell(linha, 1, "   ".join(partes))
-            cel.font = _F_W10
-            cel.fill = _fill(_C_OCHRE)
-            ws.merge_cells(f"A{linha}:F{linha}")
-            ws.row_dimensions[linha].height = 18
-            linha += 1
+        for ci, txt in enumerate(["Tipo", "Mes Receb.", "Valor (R$)",
+                                   "Principal (R$)", "Juros (R$)", "Saldo Dev. (R$)"], start=1):
+            c = ws.cell(linha, ci, txt)
+            c.font = _F_B10
+            c.fill = _fill(_C_STONE_D)
+        linha += 1
 
-            # Cabecalho das colunas
-            for ci, txt in enumerate(["Tipo", "Mes Receb.", "Valor (R$)",
-                                       "Principal (R$)", "Juros (R$)", "Saldo Dev. (R$)"], start=1):
-                c = ws.cell(linha, ci, txt)
-                c.font = _F_B10
-                c.fill = _fill(_C_STONE_D)
-            linha += 1
-
-            for ev in eventos:
-                ws.cell(linha, 1, ev["tipo"]).font = _F_N10
-                ws.cell(linha, 2, ev["mes"]).number_format = _FMT_MES
-                ws.cell(linha, 2).alignment = Alignment(horizontal="center")
-                for ci, key in [(3, "valor"), (4, "principal"), (5, "juros"), (6, "saldo_devedor")]:
-                    v = ev[key]
-                    c = ws.cell(linha, ci, v if v != 0.0 else None)
-                    c.number_format = _FMT_RS2
-                    if key == "juros" and v > 0.01:
-                        c.fill = _fill("FFF0CC")
-                linha += 1
-
-            # Subtotal
-            ws.cell(linha, 1, "Subtotal").font = _F_B10
-            ws.cell(linha, 1).fill = _fill(_C_STONE_D)
-            for ci, v in [(3, sub_valor), (4, sub_principal), (5, sub_juros)]:
+        for ev in eventos:
+            ws.cell(linha, 1, ev["tipo"]).font = _F_N10
+            ws.cell(linha, 2, ev["mes"]).number_format = _FMT_MES
+            ws.cell(linha, 2).alignment = Alignment(horizontal="center")
+            for ci, key in [(3, "valor"), (4, "principal"), (5, "juros"), (6, "saldo_devedor")]:
+                v = ev[key]
                 c = ws.cell(linha, ci, v if v != 0.0 else None)
-                c.font = _F_B10
                 c.number_format = _FMT_RS2
-                c.fill = _fill(_C_GREEN if ci == 4 else _C_STONE_D)
-            linha += 2
+                if key == "juros" and v > 0.01:
+                    c.fill = _fill("FFF0CC")
+            linha += 1
 
-            total_principal += sub_principal
-            total_juros     += sub_juros
-            total_valor     += sub_valor
+        ws.cell(linha, 1, "Subtotal").font = _F_B10
+        ws.cell(linha, 1).fill = _fill(_C_STONE_D)
+        for ci, v in [(3, sub_valor), (4, sub_principal), (5, sub_juros)]:
+            c = ws.cell(linha, ci, v if v != 0.0 else None)
+            c.font = _F_B10
+            c.number_format = _FMT_RS2
+            c.fill = _fill(_C_GREEN if ci == 4 else _C_STONE_D)
+        linha += 2
+
+        total_principal += sub_principal
+        total_juros     += sub_juros
+        total_valor     += sub_valor
+
+    if usa_novo_formato:
+        for ft in receitas.fluxos_tipologia:
+            fluxo = mapa_fluxos.get(ft.nome_tipologia)
+            if fluxo is None:
+                continue
+            tip = mapa_tipologias.get(ft.nome_tipologia)
+            if tip is None:
+                continue
+            pct_perm = mapa_permuta.get(ft.nome_tipologia, 0.0)
+            vgv_tip  = tip.vgv_total * (1 - pct_perm / 100)
+            lotes_tip = tip.quantidade * (1 - pct_perm / 100)
+            for mes_str, pct in ft.curva_mensal.items():
+                if pct <= 0:
+                    continue
+                mes_venda = int(mes_str)
+                fator = float(ft.fatores_preco.get(mes_venda, ft.fatores_preco.get(str(mes_venda), 1.0))) if ft.fatores_preco else 1.0
+                _escrever_venda(fluxo, mes_venda, vgv_tip * (pct / 100) * fator, lotes_tip * (pct / 100))
+    else:
+        for faixa in receitas.curva_vendas:
+            if faixa.fluxo_recebiveis not in mapa_fluxos:
+                continue
+            fluxo = mapa_fluxos[faixa.fluxo_recebiveis]
+            qtd_meses = max(1, faixa.mes_fim - faixa.mes_inicio + 1)
+            vgv_por_mes   = vgv_vendavel * (faixa.percentual_estoque / 100) * faixa.fator_preco / qtd_meses
+            lotes_por_mes = total_lotes_vendaveis * (faixa.percentual_estoque / 100) / qtd_meses
+            for mes_venda in range(faixa.mes_inicio, faixa.mes_fim + 1):
+                _escrever_venda(fluxo, mes_venda, vgv_por_mes, lotes_por_mes)
 
     # Total geral
     _hdr(ws, linha, 1, "TOTAL GERAL", _C_DARK, fonte=_F_W10, ncols=6, height=22)
@@ -1077,18 +1084,27 @@ def _aba_simulacao_lote(wb: Workbook, projeto: Projeto) -> None:
     _hdr(ws, 1, 1, "SIMULACAO DE 1 LOTE POR TIPOLOGIA", _C_DARK,
          fonte=_F_W11, ncols=6, height=24)
 
-    if not projeto.receitas.fluxos_recebiveis:
+    rec = projeto.receitas
+    if rec.fluxos_tipologia:
+        ft0 = rec.fluxos_tipologia[0]
+        fluxo = ft0.as_fluxo_recebiveis()
+        curva = ft0.curva_mensal
+        primeiro_mes = int(next(iter(curva))) if curva else 0
+        mes_venda = primeiro_mes
+    elif rec.fluxos_recebiveis:
+        fluxo = rec.fluxos_recebiveis[0]
+        if rec.curva_vendas:
+            primeira = rec.curva_vendas[0]
+            mes_venda = (primeira.mes_inicio + primeira.mes_fim) // 2
+        else:
+            mes_venda = 0
+    else:
         return
-    fluxo = projeto.receitas.fluxos_recebiveis[0]
+
     mes_termino = meses_entre(
         projeto.terreno.datas.inicio_projeto,
         projeto.terreno.datas.termino_obras,
     )
-    if projeto.receitas.curva_vendas:
-        primeira = projeto.receitas.curva_vendas[0]
-        mes_venda = (primeira.mes_inicio + primeira.mes_fim) // 2
-    else:
-        mes_venda = 0
 
     linha = 3
     ws.cell(linha, 1,

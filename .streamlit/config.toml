@@ -7,9 +7,9 @@ textColor = "#1A1916"
 font = "sans serif"
 
 [server]
-# Sem mensagens de telemetria
 headless = true
 runOnSave = false
+port = 8501
 
 [browser]
 gatherUsageStats = false

@@ -29,12 +29,9 @@ from src.interface.abas import (
     aba_terreno,
     aba_ferramentas,
     aba_cenarios,
-    aba_projetos,
     aba_financiamento,
     aba_reajustes,
 )
-from src.interface.abas import aba_login, aba_home
-from src.auth import carregar_sessao
 from src.interface.helpers import garantir_projeto_inicial, get_projeto, get_resultado
 from src.interface.sidebar import renderizar_sidebar_acoes, renderizar_sidebar_rodape
 from src.interface.tema import aplicar_tema
@@ -59,19 +56,18 @@ st.set_page_config(
 # ============================================================
 
 MODULOS = [
-    {"numero": 8,  "nome": "Resultado",           "icone": "📊"},
-    {"numero": 1,  "nome": "Identificação",       "icone": "📋"},
-    {"numero": 9,  "nome": "Aquisição do Terreno","icone": "🏡"},
-    {"numero": 3,  "nome": "Custos de Obra",      "icone": "🏗️"},
-    {"numero": 2,  "nome": "Receitas",            "icone": "💰"},
-    {"numero": 4,  "nome": "Despesas Indiretas",  "icone": "📎"},
-    {"numero": 5,  "nome": "Tributação",          "icone": "📑"},
-    {"numero": 7,  "nome": "Fluxo de Caixa",      "icone": "💹"},
-    {"numero": 10, "nome": "Ferramentas",         "icone": "🔧"},
-    {"numero": 11, "nome": "Cenários",            "icone": "🎲"},
-    {"numero": 12, "nome": "Projetos",            "icone": "📁"},
-    {"numero": 13, "nome": "Financiamento",       "icone": "🏦"},
-    {"numero": 14, "nome": "Reajustes",           "icone": "📈"},
+    {"numero": 8,  "nome": "Resultado",           "icone": ":material/bar_chart:"},
+    {"numero": 1,  "nome": "Identificação",       "icone": ":material/apartment:"},
+    {"numero": 9,  "nome": "Aquisição do Terreno","icone": ":material/terrain:"},
+    {"numero": 3,  "nome": "Custos de Obra",      "icone": ":material/construction:"},
+    {"numero": 2,  "nome": "Receitas",            "icone": ":material/payments:"},
+    {"numero": 4,  "nome": "Despesas Indiretas",  "icone": ":material/receipt_long:"},
+    {"numero": 5,  "nome": "Tributação",          "icone": ":material/balance:"},
+    {"numero": 7,  "nome": "Fluxo de Caixa",      "icone": ":material/waterfall_chart:"},
+    {"numero": 10, "nome": "Ferramentas",         "icone": ":material/tune:"},
+    {"numero": 11, "nome": "Cenários",            "icone": ":material/alt_route:"},
+    {"numero": 13, "nome": "Financiamento",       "icone": ":material/account_balance:"},
+    {"numero": 14, "nome": "Reajustes",           "icone": ":material/trending_up:"},
 ]
 
 
@@ -80,29 +76,7 @@ def main() -> None:
     aplicar_tema()
 
     # ================================================================
-    # ROTEAMENTO DE TELAS
-    # ================================================================
-
-    # Auto-login: restaura sessao salva em disco se existir
-    if not st.session_state.get("usuario_logado"):
-        sessao = carregar_sessao()
-        if sessao:
-            st.session_state["usuario_logado"] = sessao
-            if "projeto_path_atual" not in st.session_state:
-                st.session_state["projeto_path_atual"] = None
-
-    # Tela 1: Login / Cadastro
-    if not st.session_state.get("usuario_logado"):
-        aba_login.renderizar()
-        return
-
-    # Tela 2: Home (biblioteca de projetos) — sem projeto selecionado
-    if not st.session_state.get("projeto_path_atual"):
-        aba_home.renderizar()
-        return
-
-    # ================================================================
-    # Tela 3: Aplicativo principal (projeto aberto)
+    # Aplicativo principal
     # ================================================================
 
     # Restaura sidebar — o CSS das telas de login/home fica em cache no DOM
@@ -154,7 +128,7 @@ def main() -> None:
     modulos_com_status = []
     for m in MODULOS:
         n = m["numero"]
-        if n in (8, 9, 10, 11, 12, 13, 14):
+        if n in (8, 9, 10, 11, 13, 14):
             status = "neutro"
         else:
             stat = status_aba(pendencias, n)
@@ -197,7 +171,7 @@ def main() -> None:
             )
         with col_sair:
             st.markdown('<div style="padding-top:24px;"></div>', unsafe_allow_html=True)
-            if st.button("✕ Sair", use_container_width=True, key="btn_sair_apres"):
+            if st.button("✕ Sair", width="stretch", key="btn_sair_apres"):
                 st.session_state["modo_apresentacao"] = False
                 st.rerun()
         aba8_dashboard.renderizar()
@@ -219,7 +193,6 @@ def main() -> None:
         7:  aba7_fluxo.renderizar,
         10: aba_ferramentas.renderizar,
         11: aba_cenarios.renderizar,
-        12: aba_projetos.renderizar,
         13: aba_financiamento.renderizar,
         14: aba_reajustes.renderizar,
     }
