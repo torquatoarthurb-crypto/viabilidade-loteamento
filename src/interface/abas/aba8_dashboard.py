@@ -991,12 +991,31 @@ def _agrupar_marcos_por_periodo(
     return result
 
 
-def _transpor_df_formatado(df, marcos: dict[str, str] | None = None):
+_MES_NOMES_CAL = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+
+
+def _cal_label_from_inicio(mes_int: int, inicio) -> str:
+    """Converte offset de mes inteiro em 'set/26', dado o inicio do projeto."""
+    try:
+        _total = inicio.month - 1 + mes_int
+        _y = inicio.year + _total // 12
+        _mo = _total % 12 + 1
+        return f"{_MES_NOMES_CAL[_mo - 1]}/{str(_y)[2:]}"
+    except Exception:
+        return f"M{mes_int}"
+
+
+def _transpor_df_formatado(df, marcos: dict[str, str] | None = None, inicio_projeto=None):
     cols_val = [c for c in df.columns if c != "Mes"]
     df_m = df[df[cols_val].abs().sum(axis=1) > 0].copy()
     df_m = df_m.set_index("Mes")
 
     def _fmt_mes_label(mes) -> str:
+        if inicio_projeto is not None:
+            try:
+                return _cal_label_from_inicio(int(mes), inicio_projeto)
+            except Exception:
+                pass
         try:
             return f"M{int(mes)}"
         except (ValueError, TypeError):
@@ -1077,8 +1096,8 @@ def _estilizar_tabela(df_fmt):
 
 
 @st.dialog("Fluxo de Caixa — Visao Completa", width="large")
-def _dlg_fluxo_tela_cheia(df_agg, marcos_labels: dict[str, str] | None = None) -> None:
-    df_t = _transpor_df_formatado(df_agg, marcos=marcos_labels)
+def _dlg_fluxo_tela_cheia(df_agg, marcos_labels: dict[str, str] | None = None, inicio_projeto=None) -> None:
+    df_t = _transpor_df_formatado(df_agg, marcos=marcos_labels, inicio_projeto=inicio_projeto)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=700)
     st.caption(f"Valores em R$ mil.   {len(df_t)} linhas · {len(df_t.columns)} periodos com movimentacao.")
 
@@ -1113,18 +1132,25 @@ def _tabela_fluxo_mensal(df) -> None:
             _dlg_fluxo_tela_cheia(
                 _agregar_df(df, periodo),
                 st.session_state.get("_fluxo_marcos_labels_cache"),
+                inicio_projeto=st.session_state.get("_fluxo_inicio_projeto_cache"),
             )
 
     df_agg = _agregar_df(df, periodo)
 
-    # Compute marcos for all period views
+    # Compute marcos e inicio_projeto para labels de calendario
     _marcos_labels: dict[str, str] | None = None
+    _inicio_projeto = None
     try:
         projeto = get_projeto()
+        _inicio_projeto = projeto.terreno.datas.inicio_projeto
         _marcos_raw = marcos_projeto(projeto)
         meses_list = [int(m) for m in df["Mes"].tolist()]
         if periodo == "Mensal":
-            _marcos_labels = {f"M{k}": v for k, v in _marcos_raw.items()}
+            # Usa datas do calendario como chave para coincidir com os headers
+            _marcos_labels = {
+                _cal_label_from_inicio(k, _inicio_projeto): v
+                for k, v in _marcos_raw.items()
+            }
         elif periodo == "Trimestral":
             _marcos_labels = _agrupar_marcos_por_periodo(_marcos_raw, 3, "T", meses_list)
         else:
@@ -1133,6 +1159,7 @@ def _tabela_fluxo_mensal(df) -> None:
         _marcos_labels = None
 
     st.session_state["_fluxo_marcos_labels_cache"] = _marcos_labels
+    st.session_state["_fluxo_inicio_projeto_cache"] = _inicio_projeto if periodo == "Mensal" else None
 
     if periodo == "Mensal":
         _todos_meses = [int(m) for m in df["Mes"].tolist()]
@@ -1153,7 +1180,9 @@ def _tabela_fluxo_mensal(df) -> None:
     else:
         df_vis = df_agg
 
-    df_t = _transpor_df_formatado(df_vis, marcos=_marcos_labels)
+    # Passa inicio_projeto apenas no modo mensal (para labels de calendario)
+    _inicio_para_fmt = _inicio_projeto if periodo == "Mensal" else None
+    df_t = _transpor_df_formatado(df_vis, marcos=_marcos_labels, inicio_projeto=_inicio_para_fmt)
     if compacto:
         df_t = df_t[df_t.index.isin(_LINHAS_COMPACTAS)]
     altura = min(580, (len(df_t) + 1) * 36 + 38)

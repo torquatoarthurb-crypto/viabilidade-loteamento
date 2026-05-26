@@ -211,30 +211,31 @@ def suite_fluxo_caixa(wb, resultado) -> None:
     check("Aba Fluxo de Caixa tem conteúdo", ws.max_row > 5)
 
     # A aba Fluxo de Caixa tem items como linhas e meses como colunas.
-    # Linha 1 = cabeçalho com números de meses.
-    # Procuramos as linhas "Total Entradas", "Total Saidas", "Saldo do Mes", "Saldo Acumulado"
+    # Linha 1 = cabeçalho M0/M1..., Linha 2 = datas, Linha 3 = marcos.
+    # Colunas: A=Item, B=% Nominal, C=Total, D+=meses (começa na col 4).
+    # Procuramos as linhas "Total Entradas", "Total Saídas", "Saldo do Mês", "Saldo Acumulado"
 
     linha_entradas = _encontrar_linha_texto(ws, "Total Entradas")
-    linha_saidas   = _encontrar_linha_texto(ws, "Total Saidas")
-    linha_saldo_m  = _encontrar_linha_texto(ws, "Saldo do Mes")
+    linha_saidas   = _encontrar_linha_texto(ws, "Total Saídas")
+    linha_saldo_m  = _encontrar_linha_texto(ws, "Saldo do Mês")
     linha_saldo_ac = _encontrar_linha_texto(ws, "Saldo Acumulado")
 
     check("Linha 'Total Entradas' encontrada", linha_entradas is not None)
-    check("Linha 'Total Saidas' encontrada",   linha_saidas   is not None)
-    check("Linha 'Saldo do Mes' encontrada",   linha_saldo_m  is not None)
+    check("Linha 'Total Saídas' encontrada",   linha_saidas   is not None)
+    check("Linha 'Saldo do Mês' encontrada",   linha_saldo_m  is not None)
     check("Linha 'Saldo Acumulado' encontrada", linha_saldo_ac is not None)
 
     if not all([linha_entradas, linha_saidas, linha_saldo_m, linha_saldo_ac]):
         print("  [SKIP] Verificação de invariantes ignorada — linhas não encontradas")
         return
 
-    # Coletar valores das colunas de dados (col 2 em diante, col 1 = label)
+    # Coletar valores das colunas de meses (col 4 em diante; cols 2-3 = % Nominal e Total)
     erros_saldo = 0
     erros_acum  = 0
     saldo_acum  = 0.0
     n_meses_verificados = 0
 
-    for col in range(2, ws.max_column + 1):
+    for col in range(4, ws.max_column + 1):
         ent = _valor_celula(ws, linha_entradas, col)
         sai = _valor_celula(ws, linha_saidas,   col)
         sld = _valor_celula(ws, linha_saldo_m,  col)

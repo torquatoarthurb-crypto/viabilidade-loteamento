@@ -767,82 +767,217 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
     ws = wb.create_sheet("Fluxo de Caixa")
     df = resultado.fluxo_caixa
 
-    # Linhas que devem ser destacadas
     _linhas_negrito  = {"Total Entradas", "Total Saidas", "Saldo Acumulado"}
     _linhas_verde    = {"Total Entradas"}
     _linhas_vermelha = {"Total Saidas"}
     _linhas_azul     = {"Saldo Acumulado", "Saldo Descontado Acumulado"}
+    _sem_totais      = {"Saldo Acumulado", "Saldo Descontado Acumulado"}
 
-    cols = [c for c in df.columns if c != "Mes"]
+    # Nomes para exibicao com acento
+    _NOMES_PT: dict[str, str] = {
+        "Receita Nominal Venda":           "Receita Nominal Venda",
+        "Receita Financeira (Juros)":      "Receita Financeira (Juros)",
+        "Correcao Monetaria (Parcelas)":   "Correção Monetária (Parcelas)",
+        "Outras Receitas":                 "Outras Receitas",
+        "Total Entradas":                  "Total Entradas",
+        "Aquisicao Terreno":               "Aquisição Terreno",
+        "Cartorio":                        "Cartório",
+        "Obras":                           "Obras",
+        "Projetos":                        "Projetos",
+        "Licenciamento":                   "Licenciamento",
+        "Marketing":                       "Marketing",
+        "Outros Desenvolvimento":          "Outros Desenvolvimento",
+        "Administracao":                   "Administração",
+        "Comissao":                        "Comissão",
+        "Impostos":                        "Impostos",
+        "Permuta Financeira":              "Permuta Financeira",
+        "Saque Financiamento":             "Saque Financiamento",
+        "Amortizacao Financiamento":       "Amortização Financiamento",
+        "Juros Financiamento Banco":       "Juros Financiamento (Banco)",
+        "Comissao Abertura Financiamento": "Comissão Abertura Financiamento",
+        "Total Saidas":                    "Total Saídas",
+        "Saldo do Mes":                    "Saldo do Mês",
+        "Saldo Acumulado":                 "Saldo Acumulado",
+        "Saldo Descontado Acumulado":      "Saldo Descontado Acumulado",
+    }
+
+    # Ordem das linhas de entrada e saida
+    _ENTRADAS_COLS = [
+        "Receita Nominal Venda", "Receita Financeira (Juros)",
+        "Correcao Monetaria (Parcelas)", "Outras Receitas",
+        "Saque Financiamento",
+    ]
+    _SAIDAS_COLS = [
+        "Aquisicao Terreno", "Cartorio", "Obras", "Projetos", "Licenciamento",
+        "Marketing", "Outros Desenvolvimento", "Administracao",
+        "Amortizacao Financiamento", "Juros Financiamento Banco",
+        "Comissao Abertura Financiamento", "Comissao", "Impostos", "Permuta Financeira",
+    ]
+
     meses_lista = df["Mes"].tolist()
+    n_meses = len(meses_lista)
 
-    # Computar marcos localmente (sem importar da interface)
+    vgv_nominal = float(df["Receita Nominal Venda"].sum()) if "Receita Nominal Venda" in df.columns else 1.0
+    row_totals = {c: float(df[c].sum()) for c in df.columns if c != "Mes"}
+
+    def _show_row(col_name: str) -> bool:
+        if col_name in {"Total Entradas", "Total Saidas", "Saldo do Mes",
+                        "Saldo Acumulado", "Saldo Descontado Acumulado"}:
+            return True
+        return abs(row_totals.get(col_name, 0.0)) > 0.5
+
+    # Marcos
     try:
         inicio = projeto.terreno.datas.inicio_projeto
         _marcos_dict: dict[int, str] = {
-            0: "Inicio",
-            meses_entre(inicio, projeto.terreno.datas.aprovacao): "Aprovacao",
-            meses_entre(inicio, projeto.terreno.datas.lancamento_vendas): "Lancamento",
-            meses_entre(inicio, projeto.terreno.datas.inicio_obras): "Ini. Obras",
-            meses_entre(inicio, projeto.terreno.datas.termino_obras): "Fim Obras",
+            0: "Início",
+            meses_entre(inicio, projeto.terreno.datas.aprovacao):        "Aprovação",
+            meses_entre(inicio, projeto.terreno.datas.lancamento_vendas): "Lançamento",
+            meses_entre(inicio, projeto.terreno.datas.inicio_obras):     "Ini. Obras",
+            meses_entre(inicio, projeto.terreno.datas.termino_obras):    "Fim Obras",
         }
     except Exception:
         _marcos_dict = {}
 
-    # Cabecalho dos meses (transposto: items como linhas, meses como colunas)
-    # Linha 1: "Item" + labels de mes como "M0", "M1", ...
-    ws.cell(1, 1, "Item").font = _F_W10
-    ws.cell(1, 1).fill = _fill(_C_DARK)
-    ws.cell(1, 1).alignment = Alignment(horizontal="left", vertical="center", indent=1)
-    ws.row_dimensions[1].height = 20
-    ws.column_dimensions["A"].width = 30
+    # Labels de calendario (set/26, out/26, ...)
+    _MES_NOMES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+    try:
+        inicio = projeto.terreno.datas.inicio_projeto
+        _cal_labels: list[str] = []
+        for _mes_int in meses_lista:
+            _m = int(_mes_int)
+            _total_m = inicio.month - 1 + _m
+            _y = inicio.year + _total_m // 12
+            _mo = _total_m % 12 + 1
+            _cal_labels.append(f"{_MES_NOMES[_mo - 1]}/{str(_y)[2:]}")
+    except Exception:
+        _cal_labels = [f"M{int(m)}" for m in meses_lista]
 
-    for j, mes in enumerate(meses_lista, start=2):
-        c = ws.cell(1, j, f"M{int(mes)}")
-        c.font = Font(name="Calibri", size=9, bold=True, color="FFFFFF")
-        c.fill = _fill(_C_DARK)
-        c.alignment = Alignment(horizontal="center")
-        ws.column_dimensions[get_column_letter(j)].width = 12
+    # Layout: col A=Item, B=% Nominal, C=Total, D+=meses
+    ws.column_dimensions["A"].width = 34
+    ws.column_dimensions["B"].width = 11
+    ws.column_dimensions["C"].width = 16
+    for _j in range(n_meses):
+        ws.column_dimensions[get_column_letter(4 + _j)].width = 11
 
-    # Linha 2: "Marcos" — marcos do projeto
+    # --- Linha 1: indices de mes (M0, M1, ...) ---
+    ws.row_dimensions[1].height = 18
+    for _col_num, _label in [(1, "Item"), (2, "% Nominal"), (3, "Total")]:
+        _c = ws.cell(1, _col_num, _label)
+        _c.font = _F_W10
+        _c.fill = _fill(_C_DARK)
+        _c.alignment = Alignment(
+            horizontal="left" if _col_num == 1 else "center",
+            vertical="center",
+            indent=1 if _col_num == 1 else 0,
+        )
+    for _j, _mes in enumerate(meses_lista, start=4):
+        _c = ws.cell(1, _j, f"M{int(_mes)}")
+        _c.font = Font(name="Calibri", size=9, bold=True, color="FFFFFF")
+        _c.fill = _fill(_C_DARK)
+        _c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # --- Linha 2: datas do calendario ---
+    ws.row_dimensions[2].height = 15
+    for _col_num in range(1, 4):
+        ws.cell(2, _col_num).fill = _fill(_C_DARK)
+    for _j, _cal in enumerate(_cal_labels, start=4):
+        _c = ws.cell(2, _j, _cal)
+        _c.font = Font(name="Calibri", size=9, color="BBBBBB")
+        _c.fill = _fill(_C_DARK)
+        _c.alignment = Alignment(horizontal="center", vertical="center")
+
+    # --- Linha 3: marcos do projeto ---
     _C_OCHRE_F = "F5EED8"
-    c_marco_label = ws.cell(2, 1, "Marcos")
-    c_marco_label.font = Font(name="Calibri", size=9, bold=False, italic=True, color=_C_OCHRE)
-    c_marco_label.fill = _fill(_C_OCHRE_F)
-    c_marco_label.alignment = Alignment(indent=1)
-    ws.row_dimensions[2].height = 14
+    ws.row_dimensions[3].height = 14
+    _c = ws.cell(3, 1, "Marcos")
+    _c.font = Font(name="Calibri", size=9, italic=True, color=_C_OCHRE)
+    _c.fill = _fill(_C_OCHRE_F)
+    _c.alignment = Alignment(indent=1)
+    for _col_num in [2, 3]:
+        ws.cell(3, _col_num).fill = _fill(_C_OCHRE_F)
+    for _j, _mes in enumerate(meses_lista, start=4):
+        _label = _marcos_dict.get(int(_mes), "")
+        _c = ws.cell(3, _j, _label or None)
+        _c.fill = _fill(_C_OCHRE_F)
+        if _label:
+            _c.font = Font(name="Calibri", size=9, bold=True, color=_C_OCHRE)
+            _c.alignment = Alignment(horizontal="center")
 
-    for j, mes in enumerate(meses_lista, start=2):
-        label = _marcos_dict.get(int(mes), "")
-        c = ws.cell(2, j, label if label else None)
-        c.fill = _fill(_C_OCHRE_F)
-        if label:
-            c.font = Font(name="Calibri", size=9, bold=True, color=_C_OCHRE)
-            c.alignment = Alignment(horizontal="center")
-
-    # Dados: uma linha por categoria, comecando em linha 3
-    for i, col_name in enumerate(cols, start=3):
+    # --- Helper: escrever uma linha de dados ---
+    def _escrever_linha(linha: int, col_name: str, alternado: bool = False) -> None:
         negrito = col_name in _linhas_negrito
+        sem_tot = col_name in _sem_totais
         cor = (
-            _C_GREEN    if col_name in _linhas_verde
+            _C_GREEN   if col_name in _linhas_verde
             else _C_RED if col_name in _linhas_vermelha
             else _C_STONE if col_name in _linhas_azul
-            else (_C_STONE_D if i % 2 == 0 else _C_WHITE)
+            else (_C_STONE_D if alternado else _C_WHITE)
         )
-        c_label = ws.cell(i, 1, col_name)
-        c_label.font = _F_B10 if negrito else _F_N10
-        c_label.fill = _fill(cor)
-        c_label.alignment = Alignment(indent=1)
-        ws.row_dimensions[i].height = 15
+        ws.row_dimensions[linha].height = 15
 
-        for j, val in enumerate(df[col_name].tolist(), start=2):
-            cv = ws.cell(i, j, val if val != 0.0 else None)
-            cv.number_format = _FMT_RS
-            cv.font = _F_B10 if negrito else _F_N10
-            cv.fill = _fill(cor)
-            cv.alignment = Alignment(horizontal="right")
+        _ca = ws.cell(linha, 1, _NOMES_PT.get(col_name, col_name))
+        _ca.font = _F_B10 if negrito else _F_N10
+        _ca.fill = _fill(cor)
+        _ca.alignment = Alignment(indent=1, vertical="center")
 
-    ws.freeze_panes = "B3"
+        total = row_totals.get(col_name, 0.0)
+        pct_val = (total / vgv_nominal) if (not sem_tot and vgv_nominal) else None
+
+        _cb = ws.cell(linha, 2, round(pct_val, 4) if pct_val is not None and abs(pct_val) > 0.0001 else None)
+        _cb.number_format = _FMT_PCT
+        _cb.font = _F_B10 if negrito else _F_N10
+        _cb.fill = _fill(cor)
+        _cb.alignment = Alignment(horizontal="right", vertical="center")
+
+        _cc = ws.cell(linha, 3, total if (not sem_tot and abs(total) > 0.5) else None)
+        _cc.number_format = _FMT_RS
+        _cc.font = _F_B10 if negrito else _F_N10
+        _cc.fill = _fill(cor)
+        _cc.alignment = Alignment(horizontal="right", vertical="center")
+
+        for _j, _val in enumerate(df[col_name].tolist(), start=4):
+            _v = float(_val)
+            _cv = ws.cell(linha, _j, _v if abs(_v) > 0.5 else None)
+            _cv.number_format = _FMT_RS
+            _cv.font = _F_B10 if negrito else _F_N10
+            _cv.fill = _fill(cor)
+            _cv.alignment = Alignment(horizontal="right", vertical="center")
+
+    def _escrever_separador(linha: int) -> None:
+        ws.row_dimensions[linha].height = 5
+        for _col_num in range(1, 4 + n_meses):
+            ws.cell(linha, _col_num).fill = _fill("F0EEE9")
+
+    # --- Dados ---
+    cur = 4
+
+    alt = False
+    for col_name in _ENTRADAS_COLS:
+        if col_name in df.columns and _show_row(col_name):
+            _escrever_linha(cur, col_name, alternado=alt)
+            alt = not alt
+            cur += 1
+    _escrever_linha(cur, "Total Entradas")
+    cur += 1
+    _escrever_separador(cur); cur += 1
+
+    alt = False
+    for col_name in _SAIDAS_COLS:
+        if col_name in df.columns and _show_row(col_name):
+            _escrever_linha(cur, col_name, alternado=alt)
+            alt = not alt
+            cur += 1
+    _escrever_linha(cur, "Total Saidas")
+    cur += 1
+    _escrever_separador(cur); cur += 1
+
+    _escrever_linha(cur, "Saldo do Mes"); cur += 1
+    _escrever_linha(cur, "Saldo Acumulado"); cur += 1
+    _escrever_separador(cur); cur += 1
+    _escrever_linha(cur, "Saldo Descontado Acumulado")
+
+    ws.freeze_panes = "D4"
 
 
 # =====================================================================
