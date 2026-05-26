@@ -83,6 +83,4 @@ class Aba3Obras(BaseModel):
     def _valida(self) -> "Aba3Obras":
         if self.modo == "resumido" and self.resumido is None:
             raise ValueError("modo='resumido' exige preencher o objeto 'resumido'")
-        if self.modo == "detalhado" and not self.etapas:
-            raise ValueError("modo='detalhado' exige pelo menos uma etapa")
         return self
