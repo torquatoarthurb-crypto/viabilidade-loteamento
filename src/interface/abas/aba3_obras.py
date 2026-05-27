@@ -174,10 +174,10 @@ def renderizar() -> None:
     # ============================================================
     # MODO DO ORCAMENTO
     # ============================================================
-    # Pre-inicializa do modelo para que a volta ao modulo restaure o modo correto.
-    # O widget usa session_state["aba3_modo"]; se nao estiver definido, usa obras.modo.
+    # Inicializa pelo estado do projeto: detalhado se ja tem etapas, resumido se vazio.
     if "aba3_modo" not in st.session_state:
-        st.session_state["aba3_modo"] = "resumido"
+        _obras_ini = get_projeto().obras
+        st.session_state["aba3_modo"] = "detalhado" if _obras_ini.etapas else "resumido"
 
     st.markdown("#### Modo do Orcamento")
     modo = st.radio(

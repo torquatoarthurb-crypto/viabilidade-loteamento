@@ -44,25 +44,51 @@ def _projeto_hash(projeto) -> str:
 def _limpar_estado_abas() -> None:
     """Limpa caches de UI das abas para forcar recarga apos novo/abrir projeto."""
     chaves_para_limpar = [
-        "aba2_lista_fluxos",
-        "aba2_curva_mensal",
+        # Aba 2 — Receitas
+        "aba2_ft_lista",                   # FluxoTipologia (era "aba2_lista_fluxos" — chave errada)
+        "aba2_outras_receitas",            # Outras receitas (faltava)
+        "aba2_fatores_preco",
+        "aba2_preco_progressivo_ativo",
+        "aba2_preco_bandas",
+        # Aba 3 — Obras
         "aba3_lista_etapas",
         "aba3_resumido_distrib",
+        "aba3_modo",                       # Modo resumido/detalhado (faltava)
+        # Aba 4 — Desenvolvimento
         "aba4_lista_despesas",
-        "aba_terreno_fluxo_distrib",
+        # Aba Terreno
+        "aba_terreno_fluxo_entrada_cash",  # (era "aba_terreno_fluxo_distrib" — chave errada)
         # Ferramentas analiticas (resultados ficam obsoletos ao trocar projeto)
         "_sens_cache",
         "_mc_resultados",
         "_neg_cache",
         "historico_versoes",
-        # Preco progressivo
-        "aba2_fatores_preco",
-        "aba2_preco_progressivo_ativo",
-        "aba2_preco_bandas",
     ]
     for chave in chaves_para_limpar:
         if chave in st.session_state:
             del st.session_state[chave]
+
+
+def _sincronizar_pre_save() -> None:
+    """Sincroniza session_state -> Pydantic antes de salvar, preservando o resultado calculado."""
+    try:
+        from .abas.aba1_terreno import sincronizar_aba1
+        from .abas.aba2_receitas import sincronizar_aba2
+        from .abas.aba3_obras import sincronizar_aba3
+        from .abas.aba4_desenvolvimento import sincronizar_aba4
+        from .abas.aba5_impostos import sincronizar_aba5
+        from .abas.aba7_fluxo import sincronizar_aba7
+        _res = get_resultado()
+        sincronizar_aba1()
+        sincronizar_aba2()
+        sincronizar_aba3()
+        sincronizar_aba4()
+        sincronizar_aba5()
+        sincronizar_aba7()
+        if _res is not None:
+            set_resultado(_res)
+    except Exception:
+        pass
 
 
 def renderizar_sidebar_acoes() -> None:
@@ -221,22 +247,24 @@ def renderizar_sidebar_rodape() -> None:
                 icon=":material/save:",
             ):
                 try:
+                    _sincronizar_pre_save()
                     from ..auth import salvar_projeto_usuario
-                    caminho = salvar_projeto_usuario(usuario["email"], projeto)
+                    caminho = salvar_projeto_usuario(usuario["email"], get_projeto())
                     st.session_state["projeto_path_atual"] = str(caminho)
                     st.success("Projeto salvo")
                 except Exception as e:
                     st.error(f"Erro ao salvar: {e}")
 
-        # Download JSON (secundario)
-        json_str = projeto.model_dump_json(indent=2)
+        # Download JSON — sincroniza antes de gerar para capturar alteracoes nao calculadas
+        _sincronizar_pre_save()
+        json_str = get_projeto().model_dump_json(indent=2)
         st.download_button(
             "Baixar .json",
             data=json_str,
             file_name=f"{nome_padrao}.json",
             mime="application/json",
             width="stretch",
-            help="Baixa o arquivo JSON no seu computador.",
+            help="Baixa o arquivo JSON com todos os dados preenchidos.",
         )
 
         st.markdown("---")
@@ -419,12 +447,7 @@ def _restaurar_historico(idx: int) -> None:
         set_projeto(novo_projeto)
         invalidar_resultado()
         limpar_cache_inputs_brl()
-        for chave in [
-            "aba2_lista_fluxos", "aba2_curva_mensal", "aba3_lista_etapas",
-            "aba3_resumido_distrib", "aba4_lista_despesas", "aba_terreno_fluxo_distrib",
-        ]:
-            if chave in st.session_state:
-                del st.session_state[chave]
+        _limpar_estado_abas()
         st.rerun()
     except Exception as e:
         st.error(f"Erro ao restaurar: {e}")
