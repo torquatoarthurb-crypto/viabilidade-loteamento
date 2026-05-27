@@ -1338,7 +1338,9 @@ def _renderizar_preview_financiamento(df, resultado, projeto) -> None:
         return
     try:
         fluxo_base = df["Saldo do Mes"].to_numpy()
-        sim = simular_financiamento(fluxo_base, projeto.financiamento, resultado.horizonte)
+        # Força ativo=True para simular o banco mesmo com financiamento desativado
+        fin_sim = projeto.financiamento.model_copy(update={"ativo": True})
+        sim = simular_financiamento(fluxo_base, fin_sim, resultado.horizonte)
         custo_proj = float(sim["juros_banco"].sum())
         pico_saldo = float(sim["saldo_devedor"].max())
         mes_pico = int(np.argmax(sim["saldo_devedor"]))
@@ -1451,8 +1453,10 @@ def renderizar() -> None:
         try:
             _taxa_estimada = float(projeto.financiamento.taxa_juros_am)
             if _taxa_estimada > 0:
+                # Força ativo=True para que o engine simule o banco mesmo com financiamento desativado
+                _fin_sim = projeto.financiamento.model_copy(update={"ativo": True})
                 _sim = simular_financiamento(
-                    df["Saldo do Mes"].to_numpy(), projeto.financiamento, resultado.horizonte
+                    df["Saldo do Mes"].to_numpy(), _fin_sim, resultado.horizonte
                 )
                 _custo_estimado = float(_sim["juros_banco"].sum())
         except Exception:

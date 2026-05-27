@@ -278,17 +278,33 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         df["Saldo do Mes"] = df["Total Entradas"] - df["Total Saidas"]
         df["Saldo Acumulado"] = df["Saldo do Mes"].cumsum()
 
-    # ----- 9c. INVESTIDOR — % do negocio (retorno progressivo pos-obras) -----
+    # ----- 9c. INVESTIDOR — % do negocio (aporte + retorno progressivo pos-obras) -----
     _inv_pneg = (
         getattr(projeto.financiamento, "ativo_investidor", False)
         and getattr(projeto.financiamento, "modo_investidor", "pct_negocio") == "pct_negocio"
     )
-    _lucro_base_bruto: float = float(df["Saldo do Mes"].sum())
+    _lucro_base_bruto: float = float(df["Saldo do Mes"].sum())  # resultado operacional antes de fluxos do investidor
     _retorno_inv_pago: float = 0.0
     _retorno_inv_pendente: float = 0.0
     if _inv_pneg:
         pct_inv_v = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
         total_retorno = max(0.0, _lucro_base_bruto * pct_inv_v / 100.0)
+
+        # Etapa 1: Aporte — investidor cobre exposicoes negativas nao cobertas pelo banco
+        saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
+        aporte_arr = np.zeros(n)
+        for mes in range(n):
+            if saldo_acum_arr[mes] < -0.01:
+                aporte = -saldo_acum_arr[mes]
+                aporte_arr[mes] = aporte
+                saldo_acum_arr[mes:] += aporte
+        if aporte_arr.sum() > 0.01:
+            df["Aporte Investidor"] = aporte_arr
+            df["Total Entradas"] = df["Total Entradas"] + aporte_arr
+            df["Saldo do Mes"] = df["Saldo do Mes"] + aporte_arr
+            df["Saldo Acumulado"] = saldo_acum_arr
+
+        # Etapa 2: Retorno progressivo pos-obras (paga % do lucro operacional ao investidor)
         saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
         retorno_inv_arr = np.zeros(n)
         restante = total_retorno
@@ -390,12 +406,22 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
     resumo["investidor_modo"] = getattr(projeto.financiamento, "modo_investidor", "pct_negocio")
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "pct_negocio":
         pct_inv = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
+        lucro_loteadora = _lucro_base_bruto - _retorno_inv_pago
         resumo["investidor_pct_negocio"] = pct_inv
         resumo["lucro_bruto_antes_investidor"] = _lucro_base_bruto
         resumo["retorno_investidor_pago"] = _retorno_inv_pago
         resumo["retorno_investidor_pendente"] = _retorno_inv_pendente
         resumo["lucro_investidor"] = _retorno_inv_pago
-        resumo["lucro_loteadora"] = resumo["lucro_liquido"]
+        resumo["aporte_investidor_total"] = (
+            float(df["Aporte Investidor"].sum()) if "Aporte Investidor" in df.columns else 0.0
+        )
+        # Lucro líquido e margens refletem perspectiva P&L da loteadora (sem aportes do investidor)
+        resumo["lucro_loteadora"] = lucro_loteadora
+        resumo["lucro_liquido"] = lucro_loteadora
+        if resumo["vgv_bruto"] > 0:
+            resumo["margem_sobre_vgv_bruto"] = lucro_loteadora / resumo["vgv_bruto"]
+        if resumo["vgv_vendavel"] > 0:
+            resumo["margem_sobre_vgv_vendavel"] = lucro_loteadora / resumo["vgv_vendavel"]
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "emprestimo" and fin_data is not None:
         resumo["custo_juros_investidor"] = float(fin_data["juros_investidor"].sum())
         resumo["saldo_devedor_investidor_maximo"] = float(fin_data["saldo_devedor_investidor"].max())

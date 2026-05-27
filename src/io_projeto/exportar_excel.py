@@ -388,11 +388,13 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
             lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0))
             lucro_lot = r.get("lucro_loteadora", 0)
             pendente = r.get("retorno_investidor_pendente", 0) or 0
+            aporte_total = r.get("aporte_investidor_total", 0) or 0
             rows = [
-                ("Participacao do investidor",     f"{pct_inv:.1f}%",  False, None),
-                ("Resultado bruto antes investidor", _fmt_rs(lucro_bruto), False, None),
-                ("Retorno pago ao investidor",     _fmt_rs(lucro_inv), False, None),
-                ("Resultado loteadora",            _fmt_rs(lucro_lot), True,
+                ("Participacao do investidor",       f"{pct_inv:.1f}%",       False, None),
+                ("Resultado bruto (antes investidor)", _fmt_rs(lucro_bruto),  False, None),
+                ("Aporte total do investidor",        _fmt_rs(aporte_total),  False, None),
+                ("Retorno pago ao investidor",        _fmt_rs(lucro_inv),     False, None),
+                ("Resultado loteadora",               _fmt_rs(lucro_lot),     True,
                  _C_GREEN if lucro_lot >= 0 else _C_RED),
             ]
             if pendente > 1:
@@ -849,6 +851,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Amortizacao Financiamento":       "Amortização Financiamento",
         "Juros Financiamento Banco":       "Juros Financiamento (Banco)",
         "Comissao Abertura Financiamento": "Comissão Abertura Financiamento",
+        "Aporte Investidor":               "Aporte Investidor",
         "Saque Investidor":                "Saque Investidor",
         "Amortizacao Investidor":          "Amortização Investidor",
         "Juros Investidor":                "Juros Investidor",
@@ -863,7 +866,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
     _ENTRADAS_COLS = [
         "Receita Nominal Venda", "Receita Financeira (Juros)",
         "Correcao Monetaria (Parcelas)", "Outras Receitas",
-        "Saque Financiamento", "Saque Investidor",
+        "Saque Financiamento", "Aporte Investidor", "Saque Investidor",
     ]
     _SAIDAS_COLS = [
         "Aquisicao Terreno", "Cartorio", "Obras", "Projetos", "Licenciamento",

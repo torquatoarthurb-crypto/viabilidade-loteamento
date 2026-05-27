@@ -139,13 +139,19 @@ def _renderizar_comparativo(resumo: dict) -> None:
             lucro_inv = resumo.get("retorno_investidor_pago", resumo.get("lucro_investidor", 0))
             lucro_lot = resumo.get("lucro_loteadora", 0)
             lucro_total = resumo.get("lucro_bruto_antes_investidor", resumo.get("lucro_liquido", 0))
+            aporte_total = resumo.get("aporte_investidor_total", 0) or 0
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("Lucro Líquido Total", formatar_brl(lucro_total))
+                st.metric("Resultado Bruto (Projeto)", formatar_brl(lucro_total))
             with col2:
-                st.metric(f"Investidor ({pct:.1f}%)", formatar_brl(lucro_inv))
+                st.metric(f"Retorno Investidor ({pct:.1f}%)", formatar_brl(lucro_inv))
             with col3:
-                st.metric(f"Loteadora ({100 - pct:.1f}%)", formatar_brl(lucro_lot))
+                st.metric(f"Resultado Loteadora ({100 - pct:.1f}%)", formatar_brl(lucro_lot))
+            if aporte_total > 1:
+                st.info(
+                    f"Aporte do investidor: **{formatar_brl(aporte_total)}** — capital para cobrir "
+                    "exposição de caixa não coberta pelo banco."
+                )
 
 
 # =====================================================================
