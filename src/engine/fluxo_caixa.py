@@ -337,6 +337,7 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
             retorno_inv_arr[mes] = cap_pmt + prf_pmt
 
         df["Retorno Investidor"] = retorno_inv_arr
+        df["Total Saidas"] = df["Total Saidas"] + retorno_inv_arr
         df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_inv_arr
         df["Saldo Acumulado"] = saldo_acum_arr
         _retorno_capital_pago = total_aporte - capital_restante
