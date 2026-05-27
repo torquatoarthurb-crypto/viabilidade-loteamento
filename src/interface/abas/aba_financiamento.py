@@ -138,7 +138,7 @@ def _renderizar_comparativo(resumo: dict) -> None:
             pct = resumo.get("investidor_pct_negocio", 0)
             lucro_inv = resumo.get("lucro_investidor", 0) or 0  # obrigacao total P&L
             lucro_lot = resumo.get("lucro_loteadora", 0)
-            lucro_total = resumo.get("lucro_bruto_antes_investidor", resumo.get("lucro_liquido", 0))
+            lucro_total = resumo.get("lucro_bruto_antes_parceiros", resumo.get("lucro_bruto_antes_investidor", resumo.get("lucro_liquido", 0)))
             aporte_total = resumo.get("aporte_investidor_total", 0) or 0
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -370,8 +370,9 @@ def renderizar() -> None:
                     carencia_inv = getattr(fin, "carencia_investidor", 0)
                     if resultado is not None:
                         lucro = resultado.resumo.get(
-                            "lucro_bruto_antes_investidor",
-                            resultado.resumo.get("lucro_liquido", 0),
+                            "lucro_bruto_antes_parceiros",
+                            resultado.resumo.get("lucro_bruto_antes_investidor",
+                            resultado.resumo.get("lucro_liquido", 0)),
                         )
                         if lucro != 0:
                             lucro_inv = lucro * pct_negocio / 100

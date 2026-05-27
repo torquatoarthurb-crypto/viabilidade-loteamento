@@ -278,110 +278,137 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         df["Saldo do Mes"] = df["Total Entradas"] - df["Total Saidas"]
         df["Saldo Acumulado"] = df["Saldo do Mes"].cumsum()
 
-    # ----- 9c. INVESTIDOR — % do negocio (aporte + retorno progressivo pos-obras) -----
+    # ----- 9c. INVESTIDOR — % do negocio (aportes) -----
     _inv_pneg = (
         getattr(projeto.financiamento, "ativo_investidor", False)
         and getattr(projeto.financiamento, "modo_investidor", "pct_negocio") == "pct_negocio"
     )
-    _lucro_base_bruto: float = float(df["Saldo do Mes"].sum())  # resultado operacional antes de fluxos do investidor
-    _retorno_inv_pago: float = 0.0       # participacao no lucro efetivamente paga
-    _retorno_inv_pendente: float = 0.0   # participacao no lucro pendente
-    _retorno_capital_pago: float = 0.0   # capital aportado efetivamente devolvido
+    _lucro_base_bruto: float = float(df["Saldo do Mes"].sum())
+
+    # Saldo natural (pos-banco, pre-parceiros): define o gatilho de inicio dos pagamentos
+    _saldo_natural = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
+    _foi_negativo_nat = bool(np.any(_saldo_natural < -0.01))
+    _mes_caixa_positivo = 0
+    if _foi_negativo_nat:
+        _mes_caixa_positivo = n - 1
+        for _m in range(n):
+            if _saldo_natural[_m] >= -0.01:
+                _mes_caixa_positivo = _m
+                break
+    # Pagamentos so comecam apos o caixa acumulado virar positivo, nunca antes do fim das obras
+    _mes_inicio_pagamentos = max(_mes_caixa_positivo, mes_termino_obras)
+
+    _retorno_inv_pago: float = 0.0
+    _retorno_inv_pendente: float = 0.0
+    _retorno_capital_pago: float = 0.0
+    total_aporte_inv: float = 0.0
+    total_participacao_inv: float = 0.0
+
     if _inv_pneg:
         pct_inv_v = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
-        total_participacao = max(0.0, _lucro_base_bruto * pct_inv_v / 100.0)
+        total_participacao_inv = max(0.0, _lucro_base_bruto * pct_inv_v / 100.0)
 
-        # Etapa 1: Aporte — investidor cobre exposicoes negativas nao cobertas pelo banco
-        saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
+        # Aportes: cobrir exposicoes negativas nao cobertas pelo banco
+        _sa = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
         aporte_arr = np.zeros(n)
         for mes in range(n):
-            if saldo_acum_arr[mes] < -0.01:
-                aporte = -saldo_acum_arr[mes]
+            if _sa[mes] < -0.01:
+                aporte = -_sa[mes]
                 aporte_arr[mes] = aporte
-                saldo_acum_arr[mes:] += aporte
-        total_aporte = float(aporte_arr.sum())
-        if total_aporte > 0.01:
+                _sa[mes:] += aporte
+        total_aporte_inv = float(aporte_arr.sum())
+        if total_aporte_inv > 0.01:
             df["Aporte Investidor"] = aporte_arr
             df["Total Entradas"] = df["Total Entradas"] + aporte_arr
             df["Saldo do Mes"] = df["Saldo do Mes"] + aporte_arr
-            df["Saldo Acumulado"] = saldo_acum_arr
+            df["Saldo Acumulado"] = _sa.copy()
 
-        # Etapa 2: Retorno ao investidor pos-obras
-        # — Amortizacao do capital: prioritaria, 80% do caixa disponivel por mes
-        # — Participacao no lucro: caixa restante, ate o fim do fluxo do negocio
+    # ----- 9d. SOCIO TERRENISTA — % do resultado, sem aporte -----
+    _ter_ativo = getattr(projeto.aquisicao, "ativo_socio_terrenista", False)
+    _lucro_ter_pago: float = 0.0
+    _lucro_ter_pendente: float = 0.0
+    total_participacao_ter: float = 0.0
+
+    if _ter_ativo:
+        pct_ter = getattr(projeto.aquisicao, "pct_socio_terrenista", 0.0)
+        total_participacao_ter = max(0.0, _lucro_base_bruto * pct_ter / 100.0)
+
+    # ----- Distribuicao combinada: capital (prioridade 80%) + lucro proporcional -----
+    # Gatilho: primeiro mes em que o caixa natural fica positivo (minimo: fim das obras).
+    # Base de distribuicao: fluxo MENSAL positivo de cada mes (nao o saldo acumulado),
+    # distribuido em proporcao fixa entre investidor e terrenista.
+    # Condicao extra: so distribui quando o saldo acumulado for positivo (projeto em superavit).
+    if _inv_pneg or _ter_ativo:
+        saldo_mes_arr = df["Saldo do Mes"].to_numpy(dtype=float).copy()
         saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
         retorno_inv_arr = np.zeros(n)
-        capital_restante = total_aporte
-        participacao_restante = total_participacao
+        retorno_ter_arr = np.zeros(n)
 
-        for mes in range(mes_termino_obras, n):
-            disponivel = saldo_acum_arr[mes]
+        capital_restante = total_aporte_inv
+        inv_participacao_restante = total_participacao_inv
+        ter_participacao_restante = total_participacao_ter
+
+        _total_lucro_ob = total_participacao_inv + total_participacao_ter
+        _peso_inv = (total_participacao_inv / _total_lucro_ob) if _total_lucro_ob > 0.01 else 1.0
+        _peso_ter = 1.0 - _peso_inv
+
+        for mes in range(_mes_inicio_pagamentos, n):
+            # Nao distribuir se o projeto ainda estiver em deficit acumulado
+            if saldo_acum_arr[mes] <= 0.01:
+                continue
+
+            # Distribuir apenas o fluxo mensal positivo deste mes (conforme o fluxo)
+            disponivel = max(0.0, saldo_mes_arr[mes])
             if disponivel <= 0.01:
                 continue
 
-            # Amortizacao do capital: 80% do disponivel
+            # Amortizacao do capital do investidor (80% de prioridade do fluxo mensal)
             cap_pmt = 0.0
             if capital_restante > 0.01:
                 cap_pmt = min(disponivel * 0.80, capital_restante)
                 capital_restante -= cap_pmt
                 disponivel -= cap_pmt
                 saldo_acum_arr[mes:] -= cap_pmt
+                retorno_inv_arr[mes] += cap_pmt
 
-            # Participacao no lucro: caixa restante apos amortizacao
-            prf_pmt = 0.0
-            if participacao_restante > 0.01 and disponivel > 0.01:
-                prf_pmt = min(disponivel, participacao_restante)
-                participacao_restante -= prf_pmt
-                saldo_acum_arr[mes:] -= prf_pmt
+            # Distribuicao proporcional do lucro entre investidor e terrenista
+            lucro_pendente_tot = inv_participacao_restante + ter_participacao_restante
+            if lucro_pendente_tot > 0.01 and disponivel > 0.01:
+                pmt_lucro = min(disponivel, lucro_pendente_tot)
+                inv_prf = min(pmt_lucro * _peso_inv, inv_participacao_restante)
+                ter_pmt = min(pmt_lucro * _peso_ter, ter_participacao_restante)
+                # Redistribuir sobra caso uma das partes ja tenha liquidado sua obrigacao
+                sobra = pmt_lucro - inv_prf - ter_pmt
+                if sobra > 0.01:
+                    extra_i = min(sobra, inv_participacao_restante - inv_prf)
+                    if extra_i > 0.01:
+                        inv_prf += extra_i
+                        sobra -= extra_i
+                    if sobra > 0.01:
+                        ter_pmt += min(sobra, ter_participacao_restante - ter_pmt)
+                inv_participacao_restante -= inv_prf
+                ter_participacao_restante -= ter_pmt
+                retorno_inv_arr[mes] += inv_prf
+                retorno_ter_arr[mes] += ter_pmt
+                saldo_acum_arr[mes:] -= (inv_prf + ter_pmt)
 
-            retorno_inv_arr[mes] = cap_pmt + prf_pmt
+        if _inv_pneg:
+            df["Retorno Investidor"] = retorno_inv_arr
+            df["Total Saidas"] = df["Total Saidas"] + retorno_inv_arr
+            df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_inv_arr
 
-        df["Retorno Investidor"] = retorno_inv_arr
-        df["Total Saidas"] = df["Total Saidas"] + retorno_inv_arr
-        df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_inv_arr
-        df["Saldo Acumulado"] = saldo_acum_arr
-        _retorno_capital_pago = total_aporte - capital_restante
-        _retorno_inv_pago = total_participacao - participacao_restante
-        _retorno_inv_pendente = participacao_restante
-
-    # ----- 9d. SOCIO TERRENISTA — % do resultado, sem aporte, pos-quitacao do banco -----
-    _ter_ativo = getattr(projeto.aquisicao, "ativo_socio_terrenista", False)
-    _lucro_ter_pago: float = 0.0
-    _lucro_ter_pendente: float = 0.0
-
-    if _ter_ativo:
-        pct_ter = getattr(projeto.aquisicao, "pct_socio_terrenista", 0.0)
-        total_participacao_ter = max(0.0, _lucro_base_bruto * pct_ter / 100.0)
-
-        # Determinar o mes em que a divida bancaria e zerada (condicao para comecar a pagar)
-        mes_banco_quitado = mes_termino_obras
-        if fin_data is not None:
-            saldo_dev_arr = fin_data["saldo_devedor"]
-            for _m in range(mes_termino_obras, n):
-                if _m < len(saldo_dev_arr) and saldo_dev_arr[_m] < 0.01:
-                    mes_banco_quitado = _m
-                    break
-
-        saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
-        retorno_ter_arr = np.zeros(n)
-        participacao_ter_restante = total_participacao_ter
-
-        for mes in range(mes_banco_quitado, n):
-            disponivel = saldo_acum_arr[mes]
-            if disponivel <= 0.01 or participacao_ter_restante <= 0.01:
-                continue
-            pmt = min(disponivel, participacao_ter_restante)
-            participacao_ter_restante -= pmt
-            saldo_acum_arr[mes:] -= pmt
-            retorno_ter_arr[mes] = pmt
-
-        if total_participacao_ter > 0.01:
+        if _ter_ativo and total_participacao_ter > 0.01:
             df["Retorno Terrenista"] = retorno_ter_arr
             df["Total Saidas"] = df["Total Saidas"] + retorno_ter_arr
             df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_ter_arr
-            df["Saldo Acumulado"] = saldo_acum_arr
-            _lucro_ter_pago = total_participacao_ter - participacao_ter_restante
-            _lucro_ter_pendente = participacao_ter_restante
+
+        df["Saldo Acumulado"] = saldo_acum_arr
+
+        _retorno_capital_pago = total_aporte_inv - capital_restante
+        _retorno_inv_pago = total_participacao_inv - inv_participacao_restante
+        _retorno_inv_pendente = inv_participacao_restante
+        _lucro_ter_pago = total_participacao_ter - ter_participacao_restante
+        _lucro_ter_pendente = ter_participacao_restante
 
     fluxo = df["Saldo do Mes"].to_numpy()
     indicadores = _calcular_indicadores(fluxo, tma_mensal)

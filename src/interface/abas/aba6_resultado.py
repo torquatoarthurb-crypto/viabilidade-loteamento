@@ -117,13 +117,21 @@ def _renderizar_cascata_dre(r: dict) -> None:
         )
 
     lucro = r["lucro_liquido"]
-    lucro_dre = r.get("lucro_bruto_antes_investidor", lucro)
+    _tem_parceiros_dre = (
+        (r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio")
+        or r.get("socio_terrenista_ativo")
+    )
+    lucro_dre = (
+        r.get("lucro_bruto_antes_parceiros", r.get("lucro_bruto_antes_investidor", lucro))
+        if _tem_parceiros_dre else lucro
+    )
+    _label_dre = "Resultado do Empreendimento" if _tem_parceiros_dre else "Resultado Bruto (Lucro Liquido)"
     classe_resultado = "dre-row-resultado" + ("" if lucro_dre >= 0 else " negativo")
 
     # Construir tbody sem linhas em branco (evita que o parser Markdown termine o bloco HTML)
     linha_resultado = (
         f'<tr class="{classe_resultado}">'
-        f'<td>Resultado Bruto (Lucro Liquido)</td>'
+        f'<td>{_label_dre}</td>'
         f'<td>{formatar_brl(lucro_dre)}</td>'
         f'<td>{pct_vv(lucro_dre)}</td>'
         f'<td>{pct_vb(lucro_dre)}</td>'

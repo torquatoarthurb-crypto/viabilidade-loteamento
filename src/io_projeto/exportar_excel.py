@@ -240,7 +240,15 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     mult = ind.get("lucro_sobre_exposicao")
     margem_vv = r.get("margem_sobre_vgv_vendavel")
     margem_vb = r.get("margem_sobre_vgv_bruto")
-    lucro_dre = r.get("lucro_bruto_antes_investidor", r["lucro_liquido"])
+    _tem_parceiros_xls = (
+        (r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio")
+        or r.get("socio_terrenista_ativo")
+    )
+    lucro_dre = (
+        r.get("lucro_bruto_antes_parceiros", r.get("lucro_bruto_antes_investidor", r["lucro_liquido"]))
+        if _tem_parceiros_xls else r["lucro_liquido"]
+    )
+    _label_resultado_xls = "RESULTADO DO EMPREENDIMENTO" if _tem_parceiros_xls else "RESULTADO BRUTO (LUCRO LIQUIDO)"
 
     kpis = [
         ("Horizonte do projeto",         f"{r.get('horizonte_meses', 0)} meses",   False, None),
@@ -312,7 +320,7 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         ("  (-) Permuta Financeira",                -r["custo_permuta_financeira"], False, _C_WHITE),
         ("Total de Saidas",                         -r["total_saidas"],         True,  _C_STONE),
         ("",                                        None,                       False, _C_WHITE),
-        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         lucro_dre,                  True,
+        (_label_resultado_xls,                       lucro_dre,                  True,
          _C_GREEN if lucro_dre >= 0 else _C_RED),
     ]
 
@@ -385,7 +393,7 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         if modo_inv == "pct_negocio":
             linha = _sec(ws, linha, "INVESTIDOR — % DO NEGÓCIO", ncols=3, altura=18)
             pct_inv = r.get("investidor_pct_negocio", 0)
-            lucro_bruto = r.get("lucro_bruto_antes_investidor", r.get("lucro_liquido", 0))
+            lucro_bruto = r.get("lucro_bruto_antes_parceiros", r.get("lucro_bruto_antes_investidor", r.get("lucro_liquido", 0)))
             lucro_inv = r.get("lucro_investidor", 0) or 0   # obrigacao total P&L
             lucro_lot = r.get("lucro_loteadora", 0) or 0
             pendente = r.get("retorno_investidor_pendente", 0) or 0
