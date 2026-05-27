@@ -383,14 +383,20 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         if modo_inv == "pct_negocio":
             linha = _sec(ws, linha, "INVESTIDOR — % DO NEGÓCIO", ncols=3, altura=18)
             pct_inv = r.get("investidor_pct_negocio", 0)
-            lucro_inv = r.get("lucro_investidor", 0)
+            lucro_bruto = r.get("lucro_bruto_antes_investidor", r.get("lucro_liquido", 0))
+            lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0))
             lucro_lot = r.get("lucro_loteadora", 0)
-            for label, val, negrito, cor_f in [
+            pendente = r.get("retorno_investidor_pendente", 0) or 0
+            rows = [
                 ("Participacao do investidor",     f"{pct_inv:.1f}%",  False, None),
-                ("Lucro destinado ao investidor",  _fmt_rs(lucro_inv), False, None),
-                ("Lucro remanescente (loteadora)", _fmt_rs(lucro_lot), True,
+                ("Resultado bruto antes investidor", _fmt_rs(lucro_bruto), False, None),
+                ("Retorno pago ao investidor",     _fmt_rs(lucro_inv), False, None),
+                ("Resultado loteadora",            _fmt_rs(lucro_lot), True,
                  _C_GREEN if lucro_lot >= 0 else _C_RED),
-            ]:
+            ]
+            if pendente > 1:
+                rows.append(("Retorno pendente (caixa insuf.)", _fmt_rs(pendente), False, _C_OCHRE_L))
+            for label, val, negrito, cor_f in rows:
                 cl = ws.cell(linha, 1, label)
                 cl.font = _F_B10 if negrito else _F_N10
                 cv = ws.cell(linha, 2, val)
@@ -845,6 +851,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Saque Investidor":                "Saque Investidor",
         "Amortizacao Investidor":          "Amortização Investidor",
         "Juros Investidor":                "Juros Investidor",
+        "Retorno Investidor":              "Retorno Investidor",
         "Total Saidas":                    "Total Saídas",
         "Saldo do Mes":                    "Saldo do Mês",
         "Saldo Acumulado":                 "Saldo Acumulado",
@@ -862,6 +869,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Marketing", "Outros Desenvolvimento", "Administracao",
         "Amortizacao Financiamento", "Juros Financiamento Banco",
         "Comissao Abertura Financiamento", "Amortizacao Investidor", "Juros Investidor",
+        "Retorno Investidor",
         "Comissao", "Impostos", "Permuta Financeira",
     ]
 

@@ -117,15 +117,16 @@ def _renderizar_cascata_dre(r: dict) -> None:
         )
 
     lucro = r["lucro_liquido"]
-    classe_resultado = "dre-row-resultado" + ("" if lucro >= 0 else " negativo")
+    lucro_dre = r.get("lucro_bruto_antes_investidor", lucro)
+    classe_resultado = "dre-row-resultado" + ("" if lucro_dre >= 0 else " negativo")
 
     # Construir tbody sem linhas em branco (evita que o parser Markdown termine o bloco HTML)
     linha_resultado = (
         f'<tr class="{classe_resultado}">'
         f'<td>Resultado Bruto (Lucro Liquido)</td>'
-        f'<td>{formatar_brl(lucro)}</td>'
-        f'<td>{pct_vv(lucro)}</td>'
-        f'<td>{pct_vb(lucro)}</td>'
+        f'<td>{formatar_brl(lucro_dre)}</td>'
+        f'<td>{pct_vv(lucro_dre)}</td>'
+        f'<td>{pct_vb(lucro_dre)}</td>'
         f'</tr>'
     )
     partes = [
@@ -177,17 +178,18 @@ def _renderizar_cascata_dre(r: dict) -> None:
             ),
         ])
 
-    # Investidor % do negocio — split do lucro liquido na DRE
+    # Investidor % do negocio — retorno progressivo pos-obras na DRE
     if r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio":
-        lucro_inv = r.get("lucro_investidor", 0) or 0
+        lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0)) or 0
         lucro_lot = r.get("lucro_loteadora", 0) or 0
         pct_inv = r.get("investidor_pct_negocio", 0) or 0
+        pendente = r.get("retorno_investidor_pendente", 0) or 0
         classe_lot = "dre-row-resultado" + ("" if lucro_lot >= 0 else " negativo")
         partes.extend([
             separador(),
             (
                 f'<tr class="dre-row-deduction">'
-                f'<td>&nbsp;&nbsp;&nbsp;(-) Participacao Investidor ({pct_inv:.0f}% do lucro)</td>'
+                f'<td>&nbsp;&nbsp;&nbsp;(-) Retorno Investidor ({pct_inv:.0f}% do lucro)</td>'
                 f'<td>({formatar_brl(lucro_inv)})</td>'
                 f'<td>({pct_vv(lucro_inv)})</td>'
                 f'<td>({pct_vb(lucro_inv)})</td>'
@@ -195,13 +197,19 @@ def _renderizar_cascata_dre(r: dict) -> None:
             ),
             (
                 f'<tr class="{classe_lot}">'
-                f'<td>Resultado Loteadora (apos split)</td>'
+                f'<td>Resultado Loteadora</td>'
                 f'<td>{formatar_brl(lucro_lot)}</td>'
                 f'<td>{pct_vv(lucro_lot)}</td>'
                 f'<td>{pct_vb(lucro_lot)}</td>'
                 f'</tr>'
             ),
         ])
+        if pendente > 1:
+            partes.append(
+                f'<tr class="dre-row-deduction"><td colspan="4" style="color:#B07D2E;">'
+                f'&nbsp;&nbsp;&nbsp;Retorno pendente: {formatar_brl(pendente)} '
+                f'(caixa insuficiente no horizonte do projeto)</td></tr>'
+            )
 
     tbody = "".join(p for p in partes if p)
 

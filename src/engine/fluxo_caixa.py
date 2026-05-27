@@ -278,6 +278,32 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         df["Saldo do Mes"] = df["Total Entradas"] - df["Total Saidas"]
         df["Saldo Acumulado"] = df["Saldo do Mes"].cumsum()
 
+    # ----- 9c. INVESTIDOR — % do negocio (retorno progressivo pos-obras) -----
+    _inv_pneg = (
+        getattr(projeto.financiamento, "ativo_investidor", False)
+        and getattr(projeto.financiamento, "modo_investidor", "pct_negocio") == "pct_negocio"
+    )
+    _lucro_base_bruto: float = float(df["Saldo do Mes"].sum())
+    _retorno_inv_pago: float = 0.0
+    _retorno_inv_pendente: float = 0.0
+    if _inv_pneg:
+        pct_inv_v = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
+        total_retorno = max(0.0, _lucro_base_bruto * pct_inv_v / 100.0)
+        saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
+        retorno_inv_arr = np.zeros(n)
+        restante = total_retorno
+        for mes in range(mes_termino_obras, n):
+            if saldo_acum_arr[mes] > 0.0 and restante > 0.0:
+                pagamento = min(saldo_acum_arr[mes], restante)
+                retorno_inv_arr[mes] = pagamento
+                restante -= pagamento
+                saldo_acum_arr[mes:] -= pagamento
+        df["Retorno Investidor"] = retorno_inv_arr
+        df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_inv_arr
+        df["Saldo Acumulado"] = saldo_acum_arr
+        _retorno_inv_pago = total_retorno - restante
+        _retorno_inv_pendente = restante
+
     fluxo = df["Saldo do Mes"].to_numpy()
     indicadores = _calcular_indicadores(fluxo, tma_mensal)
 
@@ -365,8 +391,11 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "pct_negocio":
         pct_inv = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
         resumo["investidor_pct_negocio"] = pct_inv
-        resumo["lucro_investidor"] = resumo["lucro_liquido"] * pct_inv / 100
-        resumo["lucro_loteadora"] = resumo["lucro_liquido"] * (1 - pct_inv / 100)
+        resumo["lucro_bruto_antes_investidor"] = _lucro_base_bruto
+        resumo["retorno_investidor_pago"] = _retorno_inv_pago
+        resumo["retorno_investidor_pendente"] = _retorno_inv_pendente
+        resumo["lucro_investidor"] = _retorno_inv_pago
+        resumo["lucro_loteadora"] = resumo["lucro_liquido"]
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "emprestimo" and fin_data is not None:
         resumo["custo_juros_investidor"] = float(fin_data["juros_investidor"].sum())
         resumo["saldo_devedor_investidor_maximo"] = float(fin_data["saldo_devedor_investidor"].max())

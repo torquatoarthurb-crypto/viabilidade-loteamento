@@ -136,9 +136,9 @@ def _renderizar_comparativo(resumo: dict) -> None:
         with st.container(border=True):
             st.markdown("#### Resultado para o Investidor (% do Negócio)")
             pct = resumo.get("investidor_pct_negocio", 0)
-            lucro_inv = resumo.get("lucro_investidor", 0)
+            lucro_inv = resumo.get("retorno_investidor_pago", resumo.get("lucro_investidor", 0))
             lucro_lot = resumo.get("lucro_loteadora", 0)
-            lucro_total = resumo.get("lucro_liquido", 0)
+            lucro_total = resumo.get("lucro_bruto_antes_investidor", resumo.get("lucro_liquido", 0))
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Lucro Líquido Total", formatar_brl(lucro_total))
@@ -363,7 +363,10 @@ def renderizar() -> None:
                     limite_inv = getattr(fin, "limite_investidor", 0.0)
                     carencia_inv = getattr(fin, "carencia_investidor", 0)
                     if resultado is not None:
-                        lucro = resultado.resumo.get("lucro_liquido", 0)
+                        lucro = resultado.resumo.get(
+                            "lucro_bruto_antes_investidor",
+                            resultado.resumo.get("lucro_liquido", 0),
+                        )
                         if lucro != 0:
                             lucro_inv = lucro * pct_negocio / 100
                             lucro_lot = lucro * (1 - pct_negocio / 100)

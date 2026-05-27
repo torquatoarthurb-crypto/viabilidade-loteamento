@@ -321,7 +321,7 @@ _CSS_KPI_HEADLINE = """
 """
 
 
-def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
+def _kpis_topo(r: dict, ind: dict, projeto=None, custo_estimado: float = 0.0, taxa_estimada: float = 0.0) -> None:
     tma = projeto.parametros.tma_anual if projeto else 15.0
     lucro = r["lucro_liquido"]
     vgv_v = r["vgv_vendavel"]
@@ -419,9 +419,20 @@ def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
         },
         {
             "label": "Custo Financeiro",
-            "valor": _fmt_m(custo_fin) if custo_fin > 0 else "—",
-            "sub": "Juros + comissão bancária" if custo_fin > 0 else "Financiamento não ativo",
-            "cor": "vermelho" if custo_fin > 0 else "neutro",
+            "valor": (
+                _fmt_m(custo_fin) if custo_fin > 0
+                else (f"~{_fmt_m(custo_estimado)}" if custo_estimado > 0 else "—")
+            ),
+            "sub": (
+                "Juros + comissão bancária" if custo_fin > 0
+                else (
+                    f"Estimativa — {taxa_estimada:.2f}% a.m. "
+                    f"({((1 + taxa_estimada / 100) ** 12 - 1) * 100:.1f}% a.a.) | inativo"
+                    if custo_estimado > 0
+                    else "Financiamento não ativo"
+                )
+            ),
+            "cor": "vermelho" if custo_fin > 0 else ("atencao" if custo_estimado > 0 else "neutro"),
             "help": "Custo total do financiamento bancário de obras: juros ao banco + comissão de abertura.",
         },
     ]
@@ -494,16 +505,17 @@ def _renderizar_cascata_dre(r: dict, etapas_obra: dict | None = None, ind: dict 
         return '<tr class="dre-row-separator"><td colspan="4"></td></tr>'
 
     lucro = r["lucro_liquido"]
+    lucro_dre = r.get("lucro_bruto_antes_investidor", lucro)
     custo_fin = r.get("custo_financiamento_total", 0) or 0
     saldo_devedor_max = r.get("saldo_devedor_maximo", 0) or 0
 
-    classe_resultado = "dre-row-resultado" + ("" if lucro >= 0 else " negativo")
+    classe_resultado = "dre-row-resultado" + ("" if lucro_dre >= 0 else " negativo")
     linha_resultado = (
         f'<tr class="{classe_resultado}">'
         f'<td>= Resultado Líquido</td>'
-        f'<td>{formatar_brl(lucro)}</td>'
-        f'<td>{pct_vv(lucro)}</td>'
-        f'<td>{pct_vb(lucro)}</td></tr>'
+        f'<td>{formatar_brl(lucro_dre)}</td>'
+        f'<td>{pct_vv(lucro_dre)}</td>'
+        f'<td>{pct_vb(lucro_dre)}</td></tr>'
     )
 
     # Individual obras etapas with BDI proportioned
@@ -579,6 +591,31 @@ def _renderizar_cascata_dre(r: dict, etapas_obra: dict | None = None, ind: dict 
         partes.append(separador())
 
     partes.append(linha_resultado)
+
+    # Investidor % do negocio — retorno progressivo pos-obras
+    if r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio":
+        lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0)) or 0
+        lucro_lot = r.get("lucro_loteadora", 0) or 0
+        pct_inv = r.get("investidor_pct_negocio", 0) or 0
+        pendente = r.get("retorno_investidor_pendente", 0) or 0
+        classe_lot = "dre-row-resultado" + ("" if lucro_lot >= 0 else " negativo")
+        partes.extend([
+            separador(),
+            linha_deducao(f"(-) Retorno Investidor ({pct_inv:.0f}% do lucro)", lucro_inv),
+            (
+                f'<tr class="{classe_lot}">'
+                f'<td>= Resultado Loteadora</td>'
+                f'<td>{formatar_brl(lucro_lot)}</td>'
+                f'<td>{pct_vv(lucro_lot)}</td>'
+                f'<td>{pct_vb(lucro_lot)}</td></tr>'
+            ),
+        ])
+        if pendente > 1:
+            partes.append(
+                f'<tr class="dre-row-deduction"><td colspan="4" style="color:#B07D2E;">'
+                f'&nbsp;&nbsp;&nbsp;Retorno pendente: {formatar_brl(pendente)} '
+                f'(caixa insuficiente no horizonte do projeto)</td></tr>'
+            )
 
     tbody = "".join(p for p in partes if p)
     thead = (
@@ -1408,7 +1445,19 @@ def renderizar() -> None:
     _renderizar_badge_veredito(r, ind, projeto)
 
     # KPIs hierárquicos: 3 headline + 4 secundários
-    _kpis_topo(r, ind, projeto)
+    _custo_estimado = 0.0
+    _taxa_estimada = 0.0
+    if not r.get("financiamento_ativo"):
+        try:
+            _taxa_estimada = float(projeto.financiamento.taxa_juros_am)
+            if _taxa_estimada > 0:
+                _sim = simular_financiamento(
+                    df["Saldo do Mes"].to_numpy(), projeto.financiamento, resultado.horizonte
+                )
+                _custo_estimado = float(_sim["juros_banco"].sum())
+        except Exception:
+            pass
+    _kpis_topo(r, ind, projeto, custo_estimado=_custo_estimado, taxa_estimada=_taxa_estimada)
 
     # Preview de custo financeiro quando financiamento nao esta ativo
     if not r.get("financiamento_ativo"):
