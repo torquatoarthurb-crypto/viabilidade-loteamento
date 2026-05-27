@@ -789,8 +789,8 @@ def renderizar() -> None:
     mudou = False
 
     # Consumir resultados pendentes de atalhos/cenarios ANTES de renderizar
-    for tip in tipologias:
-        safe = _safe_nome(tip.nome)
+    for i, tip in enumerate(tipologias):
+        safe = f"{i}_{_safe_nome(tip.nome)}"
         ft = next((f for f in ft_lista if f["nome_tipologia"] == tip.nome), None)
         if ft is None:
             continue
@@ -817,7 +817,7 @@ def renderizar() -> None:
             if ft is None:
                 continue
 
-            safe = _safe_nome(tip.nome)
+            safe = f"{i}_{_safe_nome(tip.nome)}"
             soma_fluxo = (
                 float(ft.get("percentual_sinal", 0) or 0)
                 + float(ft.get("percentual_obra", 0) or 0)
