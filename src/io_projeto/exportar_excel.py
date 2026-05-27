@@ -239,6 +239,7 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     mult = ind.get("lucro_sobre_exposicao")
     margem_vv = r.get("margem_sobre_vgv_vendavel")
     margem_vb = r.get("margem_sobre_vgv_bruto")
+    lucro_dre = r.get("lucro_bruto_antes_investidor", r["lucro_liquido"])
 
     kpis = [
         ("Horizonte do projeto",         f"{r.get('horizonte_meses', 0)} meses",   False, None),
@@ -249,8 +250,8 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         ("VGV Vendavel",                 _fmt_rs(r["vgv_vendavel"]), False, None),
         ("Receita Total Recebida",       _fmt_rs(r["vgv_total_recebido"]), False, None),
         ("", "", False, None),
-        ("Resultado Bruto (Lucro)",      _fmt_rs(r["lucro_liquido"]), True,
-         _C_GREEN if r["lucro_liquido"] >= 0 else _C_RED),
+        ("Resultado Bruto (Lucro)",      _fmt_rs(lucro_dre), True,
+         _C_GREEN if lucro_dre >= 0 else _C_RED),
         ("Margem s/ VGV Vendavel",       _fmt_pct(margem_vv), True,
          _C_GREEN if (margem_vv or 0) >= 0 else _C_RED),
         ("Margem s/ VGV Bruto",         _fmt_pct(margem_vb), False, None),
@@ -310,8 +311,8 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
         ("  (-) Permuta Financeira",                -r["custo_permuta_financeira"], False, _C_WHITE),
         ("Total de Saidas",                         -r["total_saidas"],         True,  _C_STONE),
         ("",                                        None,                       False, _C_WHITE),
-        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         r["lucro_liquido"],         True,
-         _C_GREEN if r["lucro_liquido"] >= 0 else _C_RED),
+        ("RESULTADO BRUTO (LUCRO LIQUIDO)",         lucro_dre,                  True,
+         _C_GREEN if lucro_dre >= 0 else _C_RED),
     ]
 
     vgv_b = r["vgv_bruto"] if r["vgv_bruto"] > 0 else 1.0
