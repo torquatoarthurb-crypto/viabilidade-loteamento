@@ -228,9 +228,13 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
     tma_mensal = projeto.parametros.tma_mensal
     indicadores_base = _calcular_indicadores(fluxo_base, tma_mensal)
 
-    # ----- 9b. FINANCIAMENTO BANCARIO (A1) -----
+    # ----- 9b. FINANCIAMENTO (banco e/ou investidor-emprestimo) -----
+    _inv_emp = (
+        getattr(projeto.financiamento, "ativo_investidor", False)
+        and getattr(projeto.financiamento, "modo_investidor", "pct_negocio") == "emprestimo"
+    )
     fin_data = None
-    if projeto.financiamento.ativo:
+    if projeto.financiamento.ativo or _inv_emp:
         # Vetores acumulados para os gatilhos de liberacao (0-100%)
         _total_obras = float(obras_total.sum())
         _total_vgv = float(vgv_vendavel) if vgv_vendavel > 0 else 1.0
@@ -258,6 +262,19 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
             + df["Juros Financiamento Banco"]
             + df["Comissao Abertura Financiamento"]
         )
+
+        # Investidor — emprestimo
+        if _inv_emp:
+            df["Saque Investidor"] = fin_data["saques_investidor"]
+            df["Amortizacao Investidor"] = fin_data["amortizacoes_investidor"]
+            df["Juros Investidor"] = fin_data["juros_investidor"]
+            df["Total Entradas"] = df["Total Entradas"] + df["Saque Investidor"]
+            df["Total Saidas"] = (
+                df["Total Saidas"]
+                + df["Amortizacao Investidor"]
+                + df["Juros Investidor"]
+            )
+
         df["Saldo do Mes"] = df["Total Entradas"] - df["Total Saidas"]
         df["Saldo Acumulado"] = df["Saldo do Mes"].cumsum()
 
@@ -341,6 +358,19 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         resumo["custo_financiamento_total"] = 0.0
         resumo["saldo_devedor_maximo"] = 0.0
         resumo["saldo_devedor_final"] = 0.0
+
+    # Investidor
+    resumo["investidor_ativo"] = getattr(projeto.financiamento, "ativo_investidor", False)
+    resumo["investidor_modo"] = getattr(projeto.financiamento, "modo_investidor", "pct_negocio")
+    if resumo["investidor_ativo"] and resumo["investidor_modo"] == "pct_negocio":
+        pct_inv = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
+        resumo["investidor_pct_negocio"] = pct_inv
+        resumo["lucro_investidor"] = resumo["lucro_liquido"] * pct_inv / 100
+        resumo["lucro_loteadora"] = resumo["lucro_liquido"] * (1 - pct_inv / 100)
+    if resumo["investidor_ativo"] and resumo["investidor_modo"] == "emprestimo" and fin_data is not None:
+        resumo["custo_juros_investidor"] = float(fin_data["juros_investidor"].sum())
+        resumo["saldo_devedor_investidor_maximo"] = float(fin_data["saldo_devedor_investidor"].max())
+        resumo["saldo_devedor_investidor_final"] = fin_data["saldo_devedor_investidor_final"]
 
     return ResultadoCalculo(
         fluxo_caixa=df,

@@ -205,7 +205,7 @@ def set_resultado(resultado: Any) -> None:
 
 def cabecalho_aba(numero: int, titulo: str, descricao: str = "") -> None:
     """Cabecalho padrao no topo de cada aba."""
-    st.markdown(f"### Aba {numero} — {titulo}")
+    st.markdown(f"### {titulo}")
     if descricao:
         st.caption(descricao)
     st.markdown("---")
@@ -379,7 +379,7 @@ def criar_fig_linha_do_tempo(projeto):
             marker=dict(size=10, color=cor, symbol="circle",
                         line=dict(color="#F5F3EE", width=2)),
             text=[f"<b>M{mes}</b> {data_str}<br>{nome}"],
-            textposition="top center" if ymark > 0 else "bottom center",
+            textposition="top right" if i == 0 else ("top center" if ymark > 0 else "bottom center"),
             textfont=dict(size=9, color=cor),
             hovertemplate=f"<b>{nome}</b><br>Mes {mes} — {data_str}<extra></extra>",
             showlegend=False,

@@ -56,7 +56,7 @@ class ConfigFinanciamento(BaseModel):
         ),
     )
 
-    # ---- Gatilhos de liberacao do financiamento ----
+    # ---- Gatilhos de liberacao do financiamento (banco) ----
     gatilho_tipo: Literal["nenhum", "vendas", "obras", "ambos"] = Field(
         default="nenhum",
         description=(
@@ -74,6 +74,40 @@ class ConfigFinanciamento(BaseModel):
     gatilho_obras_pct: float = Field(
         default=30.0, ge=0.0, le=100.0,
         description="% do custo total de obras desembolsado necessario para liberar o financiamento.",
+    )
+
+    # ---- Investidor ----
+    ativo_investidor: bool = Field(
+        default=False,
+        description="Ativar participacao de investidor no projeto.",
+    )
+    modo_investidor: Literal["pct_negocio", "emprestimo"] = Field(
+        default="pct_negocio",
+        description=(
+            "'pct_negocio' = investidor recebe % do lucro liquido (split na DRE). "
+            "'emprestimo' = aporte como emprestimo com juros e amortizacao, "
+            "ativo apenas nas janelas em que o banco nao pode sacar (gatilho nao atingido)."
+        ),
+    )
+    investidor_pct_negocio: float = Field(
+        default=20.0, ge=0.0, le=100.0,
+        description="% do lucro liquido destinado ao investidor (modo pct_negocio).",
+    )
+    taxa_juros_investidor_am: float = Field(
+        default=1.5, ge=0.0, le=10.0,
+        description="Taxa de juros mensal do emprestimo do investidor % a.m. (sem comissao nem IOF).",
+    )
+    limite_investidor: float = Field(
+        default=0.0, ge=0.0,
+        description="Limite de credito do investidor em R$ (0 = sem limite).",
+    )
+    carencia_investidor: int = Field(
+        default=0, ge=0,
+        description="Periodo de carencia do emprestimo do investidor (meses).",
+    )
+    ordem_amortizacao: Literal["banco_primeiro", "investidor_primeiro"] = Field(
+        default="banco_primeiro",
+        description="Qual divida e amortizada primeiro quando banco e investidor-emprestimo estao ambos ativos.",
     )
 
 

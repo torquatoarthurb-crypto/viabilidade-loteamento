@@ -324,44 +324,28 @@ _CSS_KPI_HEADLINE = """
 def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
     tma = projeto.parametros.tma_anual if projeto else 15.0
     lucro = r["lucro_liquido"]
-    vgv = r["vgv_vendavel"]
-    margem = (lucro / vgv * 100) if vgv > 0 else 0
+    vgv_v = r["vgv_vendavel"]
+    vgv_b = r["vgv_bruto"]
+    marg_liq = (lucro / vgv_v * 100) if vgv_v > 0 else 0
+    marg_bruta = (lucro / vgv_b * 100) if vgv_b > 0 else 0
     vpl = ind["vpl"]
     tir = ind.get("tir_anual")
     exp_max = abs(ind["exposicao_maxima"])
     mes_exp = ind["mes_exposicao_maxima"]
     pb = ind.get("payback_simples_meses")
-    custo_total = r["total_saidas"]
     horizonte = r.get("horizonte_meses", 0)
+    rec_fin = r.get("receita_financeira", 0)
+    custo_fin = r.get("custo_financiamento_total", 0)
 
-    tir_pct = tir * 100 if tir else 0
-    if tir is not None:
-        if tir_pct >= tma:
-            tir_cor, tir_sub = "verde", f"Acima da TMA ({tma:.0f}% a.a.)"
-        elif tir_pct >= tma * 0.85:
-            tir_cor, tir_sub = "atencao", f"Próxima da TMA ({tma:.0f}% a.a.)"
-        else:
-            tir_cor, tir_sub = "vermelho", f"Abaixo da TMA ({tma:.0f}% a.a.)"
-    else:
-        tir_cor, tir_sub = "neutro", "TIR não convergiu"
+    # --- Headline (3 cards grandes) ---
+    lucro_cor = "verde" if lucro >= 0 else "vermelho"
+    lucro_sub = f"VGV Vendável: {_fmt_m(vgv_v)}"
 
-    vpl_cor = "verde" if vpl > 0 else "vermelho"
-    vpl_sub = "Projeto viável" if vpl > 0 else "Projeto inviável"
-    marg_cor = "verde" if margem >= 15 else ("atencao" if margem > 0 else "vermelho")
-    marg_sub = f"Resultado / VGV Vendável · R$ {lucro / 1e6:.1f}M".replace(".", ",")
+    marg_liq_cor = "verde" if marg_liq >= 15 else ("atencao" if marg_liq > 0 else "vermelho")
+    marg_liq_sub = f"Resultado ÷ VGV Vendável"
 
-    _TIP_TIR = (
-        "Taxa Interna de Retorno — taxa que zera o VPL do projeto, equivalente ao "
-        "rendimento anual do investimento. Compare com a TMA: TIR > TMA = projeto viável."
-    )
-    _TIP_VPL = (
-        "Valor Presente Líquido — soma de todas as entradas e saídas trazidas a valor "
-        "de hoje pela TMA. Positivo = projeto rende mais do que o custo de oportunidade."
-    )
-    _TIP_MARG = (
-        "Lucro líquido ÷ VGV vendável. Loteamentos de alto padrão buscam 20–30%. "
-        "Abaixo de 15% o projeto é considerado marginal; abaixo de 5% é inviável."
-    )
+    marg_bruta_cor = "verde" if marg_bruta >= 12 else ("atencao" if marg_bruta > 0 else "vermelho")
+    marg_bruta_sub = f"Resultado ÷ VGV Bruto"
 
     def _hl(label, valor, sub, cor, tip=""):
         title_attr = f' title="{tip}"' if tip else ""
@@ -374,54 +358,83 @@ def _kpis_topo(r: dict, ind: dict, projeto=None) -> None:
         )
 
     cards_html = (
-        _hl("TIR Anual",          f"{tir_pct:.1f}%" if tir else "—", tir_sub, tir_cor, _TIP_TIR)
-        + _hl(f"VPL ({tma:.0f}% a.a.)", _fmt_m(vpl),              vpl_sub, vpl_cor, _TIP_VPL)
-        + _hl("Margem s/ VGV",   f"{margem:.1f}%",                 marg_sub, marg_cor, _TIP_MARG)
+        _hl("Lucro Líquido",   _fmt_m(lucro),           lucro_sub,      lucro_cor)
+        + _hl("Margem Líquida", f"{marg_liq:.1f}%",     marg_liq_sub,   marg_liq_cor)
+        + _hl("Margem Bruta",   f"{marg_bruta:.1f}%",   marg_bruta_sub, marg_bruta_cor)
     )
     st.markdown(_CSS_KPI_HEADLINE, unsafe_allow_html=True)
     st.markdown(f'<div class="kpi-hl-grid">{cards_html}</div>', unsafe_allow_html=True)
 
+    # --- Secundários (6 cards menores) ---
+    tir_pct = tir * 100 if tir else 0
+    if tir is not None:
+        if tir_pct >= tma:
+            tir_cor, tir_sub = "verde", f"Acima da TMA ({tma:.0f}% a.a.)"
+        elif tir_pct >= tma * 0.85:
+            tir_cor, tir_sub = "atencao", f"Próxima da TMA ({tma:.0f}% a.a.)"
+        else:
+            tir_cor, tir_sub = "vermelho", f"Abaixo da TMA ({tma:.0f}% a.a.)"
+    else:
+        tir_cor, tir_sub = "neutro", "TIR não convergiu"
+
+    vpl_cor = "verde" if vpl > 0 else "vermelho"
     pb_val = f"M{pb}" if pb else "—"
     pb_sub = f"de {horizonte} meses no projeto" if (pb and horizonte > 0) else ""
+
     kpis_sec = [
         {
-            "label": "VGV Vendável",
-            "valor": _fmt_m(vgv),
-            "cor": "neutro",
-            "help": "VGV Bruto menos lotes destinados à permuta física. Base de cálculo da margem e dos impostos.",
+            "label": f"VPL ({tma:.0f}% a.a.)",
+            "valor": _fmt_m(vpl),
+            "sub": "Projeto viável" if vpl > 0 else "Projeto inviável",
+            "cor": vpl_cor,
+            "help": "Valor Presente Líquido — soma de todas as entradas e saídas trazidas a valor de hoje pela TMA.",
         },
         {
-            "label": "Custo Total",
-            "valor": _fmt_m(custo_total),
-            "cor": "neutro",
-            "help": "Soma de todas as saídas: terreno + obras (com BDI e contingência) + incorporação + comissão + impostos.",
-        },
-        {
-            "label": "Pico de Exposição",
-            "valor": _fmt_m(-exp_max),
-            "sub": f"no M{mes_exp}",
-            "cor": "vermelho",
-            "help": "Maior saldo acumulado negativo — capital próprio máximo que precisa estar disponível ao mesmo tempo. Quanto menor, menor o risco de falta de caixa.",
+            "label": "TIR Anual",
+            "valor": f"{tir_pct:.1f}%" if tir else "—",
+            "sub": tir_sub,
+            "cor": tir_cor,
+            "help": "Taxa Interna de Retorno — equivalente ao rendimento anual do investimento. TIR > TMA = projeto viável.",
         },
         {
             "label": "Payback",
             "valor": pb_val,
             "sub": pb_sub,
             "cor": "neutro",
-            "help": "Mês em que o saldo acumulado cruza o zero — quando as receitas totais superam as saídas e o investimento começa a ser recuperado.",
+            "help": "Mês em que o saldo acumulado cruza o zero — quando as receitas totais superam o total de saídas.",
+        },
+        {
+            "label": "Receita Financeira",
+            "valor": _fmt_m(rec_fin),
+            "sub": "Juros embutidos nas parcelas",
+            "cor": "neutro" if rec_fin > 0 else "neutro",
+            "help": "Juros do sistema Price embutidos nas parcelas do financiamento comprador.",
+        },
+        {
+            "label": "Exposição Máxima",
+            "valor": _fmt_m(-exp_max),
+            "sub": f"no M{mes_exp}",
+            "cor": "vermelho",
+            "help": "Capital próprio máximo que precisa estar disponível ao mesmo tempo — pico do saldo acumulado negativo.",
+        },
+        {
+            "label": "Custo Financeiro",
+            "valor": _fmt_m(custo_fin) if custo_fin > 0 else "—",
+            "sub": "Juros + comissão bancária" if custo_fin > 0 else "Financiamento não ativo",
+            "cor": "vermelho" if custo_fin > 0 else "neutro",
+            "help": "Custo total do financiamento bancário de obras: juros ao banco + comissão de abertura.",
         },
     ]
     renderizar_grade_kpis(kpis_sec)
 
 
 # =====================================================================
-# DRE EM CASCATA (ABA 6)
+# DRE EM CASCATA
 # =====================================================================
 
-def _renderizar_cascata_dre(r: dict) -> None:
+def _renderizar_cascata_dre(r: dict, etapas_obra: dict | None = None, ind: dict | None = None) -> None:
     vgv_bruto = r["vgv_bruto"]
     vgv_vendavel = r["vgv_vendavel"]
-    permuta_fisica = vgv_bruto - vgv_vendavel
 
     def pct_vv(v: float) -> str:
         return formatar_pct(v / vgv_vendavel) if vgv_vendavel > 0 else "—"
@@ -436,12 +449,13 @@ def _renderizar_cascata_dre(r: dict) -> None:
             f'<td>{pct_vv(valor)}</td><td>{pct_vb(valor)}</td></tr>'
         )
 
-    def linha_deducao(label: str, valor: float) -> str:
+    def linha_deducao(label: str, valor: float, indent: int = 1) -> str:
         if valor == 0:
             return ""
+        sp = "&nbsp;&nbsp;&nbsp;" * indent
         return (
             f'<tr class="dre-row-deduction">'
-            f'<td>&nbsp;&nbsp;&nbsp;{label}</td>'
+            f'<td>{sp}{label}</td>'
             f'<td>({formatar_brl(valor)})</td>'
             f'<td>({pct_vv(valor)})</td>'
             f'<td>({pct_vb(valor)})</td></tr>'
@@ -465,52 +479,133 @@ def _renderizar_cascata_dre(r: dict) -> None:
             f'<td>{pct_vv(valor)}</td><td>{pct_vb(valor)}</td></tr>'
         )
 
+    def linha_grupo(label: str, valor: float) -> str:
+        if valor == 0:
+            return ""
+        return (
+            f'<tr class="dre-row-deduction">'
+            f'<td><strong>{label}</strong></td>'
+            f'<td><strong>({formatar_brl(valor)})</strong></td>'
+            f'<td><strong>({pct_vv(valor)})</strong></td>'
+            f'<td><strong>({pct_vb(valor)})</strong></td></tr>'
+        )
+
     def separador() -> str:
         return '<tr class="dre-row-separator"><td colspan="4"></td></tr>'
 
     lucro = r["lucro_liquido"]
+    custo_fin = r.get("custo_financiamento_total", 0) or 0
+    saldo_devedor_max = r.get("saldo_devedor_maximo", 0) or 0
+
     classe_resultado = "dre-row-resultado" + ("" if lucro >= 0 else " negativo")
     linha_resultado = (
         f'<tr class="{classe_resultado}">'
-        f'<td>Resultado Bruto (Lucro Liquido)</td>'
+        f'<td>= Resultado Líquido</td>'
         f'<td>{formatar_brl(lucro)}</td>'
         f'<td>{pct_vv(lucro)}</td>'
         f'<td>{pct_vb(lucro)}</td></tr>'
     )
 
-    partes = [
-        linha_header("VGV Bruto", vgv_bruto),
-        linha_deducao("(-) Permuta Fisica", permuta_fisica),
-        linha_subtotal("VGV Vendavel (base de calculo)", vgv_vendavel),
-        linha_adicao("(+) Receita Financeira (Juros)", r["receita_financeira"]),
-        linha_subtotal("Receita Total", r["vgv_total_recebido"]),
+    # Individual obras etapas with BDI proportioned
+    etapas_linhas: list[str] = []
+    if etapas_obra:
+        try:
+            custo_direto_total = sum(float(v.sum()) for v in etapas_obra.values())
+            if custo_direto_total > 0:
+                mult = r["custo_obras"] / custo_direto_total
+                for nome, vetor in etapas_obra.items():
+                    val = float(vetor.sum()) * mult
+                    if val > 0.5:
+                        etapas_linhas.append(linha_deducao(nome, val, indent=2))
+            else:
+                etapas_linhas.append(linha_deducao("Obras (total)", r["custo_obras"], indent=2))
+        except Exception:
+            etapas_linhas.append(linha_deducao("Obras (total)", r["custo_obras"], indent=2))
+    else:
+        etapas_linhas.append(linha_deducao("Obras (total)", r["custo_obras"], indent=2))
+
+    custo_custos = (
+        r["custo_obras"] + r["custo_projetos"] + r["custo_licenciamento"] + r["custo_outros"]
+    )
+    custo_deducoes = (
+        r["custo_impostos"] + r["custo_comissao"] + r["custo_marketing"] + r["custo_administracao"]
+    )
+    custo_terreno = r["custo_terreno_aquisicao"] + r["custo_terreno_cartorio"]
+
+    partes: list[str] = [
+        # (+) Entradas
+        linha_header("(+) Entradas — VGV Vendável", vgv_vendavel),
+        linha_adicao("(+) Receita Financeira (Juros Parcelas)", r["receita_financeira"]),
+        linha_subtotal("= Total de Entradas", r["vgv_total_recebido"]),
         separador(),
-        linha_deducao("(-) Aquisicao do Terreno",    r["custo_terreno_aquisicao"]),
-        linha_deducao("(-) Cartorio",                 r["custo_terreno_cartorio"]),
-        linha_deducao("(-) Obras",                    r["custo_obras"]),
-        linha_deducao("(-) Projetos",                 r["custo_projetos"]),
-        linha_deducao("(-) Licenciamento",             r["custo_licenciamento"]),
-        linha_deducao("(-) Marketing",                r["custo_marketing"]),
-        linha_deducao("(-) Outros",                   r["custo_outros"]),
-        linha_deducao("(-) Administracao",            r["custo_administracao"]),
-        linha_deducao("(-) Comissao de Vendas",       r["custo_comissao"]),
-        linha_deducao("(-) Impostos / Tributacao",    r["custo_impostos"]),
-        linha_deducao("(-) Permuta Financeira",       r["custo_permuta_financeira"]),
+        # (-) Terreno
+        linha_grupo("(-) Terreno", custo_terreno),
+        linha_deducao("Aquisição do Terreno", r["custo_terreno_aquisicao"], indent=2),
+        linha_deducao("Cartório / Registro", r["custo_terreno_cartorio"], indent=2),
         separador(),
-        linha_subtotal("Total de Saidas", r["total_saidas"]),
+        # (-) Permuta Líquida
+        linha_deducao("(-) Permuta Líquida", r["custo_permuta_financeira"]),
+        separador() if r["custo_permuta_financeira"] > 0 else "",
+        # (-) Deduções e Despesas
+        linha_grupo("(-) Deduções e Despesas", custo_deducoes),
+        linha_deducao("Impostos / Tributação", r["custo_impostos"], indent=2),
+        linha_deducao("Comissões de Vendas", r["custo_comissao"], indent=2),
+        linha_deducao("Marketing", r["custo_marketing"], indent=2),
+        linha_deducao("Gestão de Carteira", r["custo_administracao"], indent=2),
         separador(),
-        linha_resultado,
+        # (-) Custos de Obras e Desenvolvimento
+        linha_grupo("(-) Custos de Obras e Desenvolvimento", custo_custos),
+        *etapas_linhas,
+        linha_deducao("Projetos", r["custo_projetos"], indent=2),
+        linha_deducao("Licenciamento", r["custo_licenciamento"], indent=2),
+        linha_deducao("Outros", r["custo_outros"], indent=2),
+        separador(),
     ]
+
+    if custo_fin > 0:
+        partes.extend([
+            linha_deducao("(-) Despesas Financeiras (Juros + Comissão Bancária)", custo_fin),
+            separador(),
+        ])
+
+    if saldo_devedor_max > 0:
+        partes.append(
+            f'<tr class="dre-row-subtotal">'
+            f'<td style="color:#4A7FA5;">(+/-) Financiamento da Exposição (saldo máx.)</td>'
+            f'<td style="color:#4A7FA5;">{formatar_brl(saldo_devedor_max)}</td>'
+            f'<td style="color:#4A7FA5;">—</td>'
+            f'<td style="color:#4A7FA5;">—</td></tr>'
+        )
+        partes.append(separador())
+
+    partes.append(linha_resultado)
+
     tbody = "".join(p for p in partes if p)
     thead = (
         '<thead><tr>'
-        '<th style="width:40%;">Descricao</th>'
+        '<th style="width:40%;">Descrição</th>'
         '<th style="width:20%;">Valor (R$)</th>'
-        '<th style="width:20%;">% VGV Vendavel</th>'
+        '<th style="width:20%;">% VGV Vendável</th>'
         '<th style="width:20%;">% VGV Bruto</th>'
         '</tr></thead>'
     )
     st.markdown(f'<table class="dre-table">{thead}<tbody>{tbody}</tbody></table>', unsafe_allow_html=True)
+
+    if ind is not None:
+        exp = abs(ind.get("exposicao_maxima", 0))
+        mes_exp = ind.get("mes_exposicao_maxima", 0)
+        if exp > 0:
+            st.markdown(
+                f'<div style="margin-top:12px;padding:10px 16px;background:#F5F3EE;'
+                f'border-left:3px solid #C05454;border-radius:4px;">'
+                f'<span style="font-size:11px;font-weight:700;color:#8A8880;'
+                f'text-transform:uppercase;letter-spacing:0.08em;">Exposição Máxima de Caixa</span>'
+                f'<span style="font-size:18px;font-weight:600;color:#C05454;margin-left:16px;">'
+                f'{formatar_brl(-exp)}</span>'
+                f'<span style="font-size:12px;color:#5A5650;margin-left:8px;">no M{mes_exp}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _renderizar_cards_margem(r: dict, ind: dict) -> None:
@@ -740,13 +835,14 @@ def _grafico_curva_caixa(df, ind: dict, mes_inicio_obras: int, mes_termino: int)
         xaxis=dict(title="Mes", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
         yaxis=dict(title="R$", tickformat=".3s", gridcolor="#D8D4C8", zerolinecolor="#C4C1B8"),
         height=430,
+        margin=dict(l=60, r=170, t=50, b=50),
+        legend=dict(
+            bgcolor="#F5F3EE", bordercolor="#D8D4C8", borderwidth=1,
+            font=dict(size=10), orientation="v",
+            xanchor="left", x=1.02, y=1, yanchor="top",
+        ),
     ))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
-    st.caption(
-        "Area vermelha: capital em exposição. "
-        "Area verde: zona de retorno. "
-        "Linha pontilhada azul clara: saldo descontado pela TMA — quando chega ao zero, é o payback descontado."
-    )
 
 
 def _grafico_composicao_mensal(df, mes_inicio_obras: int, mes_termino: int) -> None:
@@ -809,10 +905,6 @@ def _grafico_composicao_mensal(df, mes_inicio_obras: int, mes_termino: int) -> N
     fig.update_yaxes(title_text="R$", tickformat=".3s", secondary_y=False, gridcolor="#D8D4C8", zerolinecolor="#C4C1B8")
     fig.update_yaxes(title_text="Saldo Mensal", tickformat=".3s", secondary_y=True, showgrid=False, tickfont=dict(color="#5A5650"), title_font=dict(color="#5A5650"))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
-    st.caption(
-        "Barras acima do zero: receitas. Barras abaixo do zero: saidas por categoria. "
-        "Linha pontilhada branca: saldo liquido do mes."
-    )
 
 
 def _grafico_curvas_acumuladas(df, mes_inicio_obras: int, mes_termino: int) -> None:
@@ -857,15 +949,24 @@ def _grafico_curvas_acumuladas(df, mes_inicio_obras: int, mes_termino: int) -> N
         height=400,
     ))
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
-    st.caption(
-        "Linha verde: receitas totais acumuladas. "
-        "Linha vermelha: saidas totais acumuladas. "
-        "O ponto de cruzamento (break-even) e quando as receitas superam o total de saidas."
-    )
 
 
 def _pct_comercializado_mensal(projeto, horizonte: int) -> list[float]:
     pct: list[float] = [0.0] * (horizonte + 1)
+    fluxos = projeto.receitas.fluxos_tipologia
+    if fluxos:
+        total_lotes = sum(t.quantidade for t in projeto.terreno.tipologias)
+        if total_lotes > 0:
+            qtd_by_nome = {t.nome: t.quantidade for t in projeto.terreno.tipologias}
+            for ft in fluxos:
+                qtd = qtd_by_nome.get(ft.nome_tipologia, 0)
+                peso = qtd / total_lotes
+                for mes_str, pct_mes in ft.curva_mensal.items():
+                    m = int(mes_str)
+                    if 0 <= m <= horizonte:
+                        pct[m] += pct_mes * peso
+        return pct
+    # Fallback: legacy curva_vendas
     for faixa in projeto.receitas.curva_vendas:
         n = faixa.mes_fim - faixa.mes_inicio + 1
         pct_por_mes = faixa.percentual_estoque / n if n > 0 else faixa.percentual_estoque
@@ -915,11 +1016,6 @@ def _grafico_obras_vs_comercializacao(df, projeto, horizonte: int, mes_termino: 
         tickfont=dict(color="#3D8B5E"), title_font=dict(color="#3D8B5E"),
     )
     st.plotly_chart(fig, use_container_width=True, config=_PLOTLY_CONFIG)
-    st.caption(
-        "Barras (amarelo): desembolso mensal de obras. "
-        "Linha (verde): % do empreendimento comercializado acumulado. "
-        "Quando a linha verde sobe mais rapido que as barras, as vendas estao financiando as obras."
-    )
 
 
 # =====================================================================
@@ -1287,9 +1383,6 @@ def renderizar() -> None:
             except Exception:
                 pass
 
-    # Saude do modelo
-    _renderizar_saude(projeto)
-
     # Linha do tempo
     renderizar_linha_tempo_trilhas(projeto)
 
@@ -1334,39 +1427,27 @@ def renderizar() -> None:
 
     st.markdown("---")
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tabDRE, tab1, tab2, tab3 = st.tabs([
+        "DRE",
         "Curva de Caixa",
         "Mensal e Receitas",
         "Obras e Vendas",
-        "DRE",
     ])
 
+    with tabDRE:
+        _renderizar_cascata_dre(r, resultado.etapas_obra, ind)
+
     with tab1:
-        st.caption("Quando o projeto precisa de capital e quando começa a retornar — saldo acumulado ao longo do tempo.")
         _grafico_curva_caixa(df, ind, mes_inicio_obras, mes_termino)
 
     with tab2:
-        st.caption("Entradas e saídas mês a mês por categoria — identifique picos de desembolso e recebimento.")
         _grafico_composicao_mensal(df, mes_inicio_obras, mes_termino)
         st.markdown("---")
-        st.caption("Receitas e saídas acumuladas — o projeto fica positivo quando a linha verde ultrapassa a vermelha.")
         _grafico_curvas_acumuladas(df, mes_inicio_obras, mes_termino)
 
     with tab3:
-        st.caption("Desembolso de obras x velocidade de vendas — sincronize os picos para otimizar o caixa.")
         _grafico_obras_vs_comercializacao(df, projeto, resultado.horizonte, mes_termino)
 
-    with tab4:
-        st.caption("DRE — Demonstrativo de Resultado em cascata: VGV → deduções → custos → resultado.")
-        _renderizar_cascata_dre(r)
-        st.markdown("---")
-        _renderizar_cards_margem(r, ind)
-        st.markdown("---")
-        _renderizar_nominal_vs_financeiro(r)
-        st.markdown("---")
-        with st.expander("Composição de Saídas por Categoria", expanded=False):
-            st.caption("Participação de cada categoria de custo no total de saídas.")
-            _renderizar_composicao_saidas(r)
-
-    # Tabela de fluxo com seletor de periodicidade
-    _tabela_fluxo_mensal(df)
+    st.markdown("---")
+    with st.expander("Composição de Saídas por Categoria", expanded=False):
+        _renderizar_composicao_saidas(r)

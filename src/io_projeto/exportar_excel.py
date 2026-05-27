@@ -375,6 +375,53 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
                 cl.fill = _fill(_C_RED)
             linha += 1
 
+    # Secao de investidor (so quando ativo)
+    if r.get("investidor_ativo"):
+        linha += 1
+        modo_inv = r.get("investidor_modo", "pct_negocio")
+        fin = projeto.financiamento
+        if modo_inv == "pct_negocio":
+            linha = _sec(ws, linha, "INVESTIDOR — % DO NEGÓCIO", ncols=3, altura=18)
+            pct_inv = r.get("investidor_pct_negocio", 0)
+            lucro_inv = r.get("lucro_investidor", 0)
+            lucro_lot = r.get("lucro_loteadora", 0)
+            for label, val, negrito, cor_f in [
+                ("Participacao do investidor",     f"{pct_inv:.1f}%",  False, None),
+                ("Lucro destinado ao investidor",  _fmt_rs(lucro_inv), False, None),
+                ("Lucro remanescente (loteadora)", _fmt_rs(lucro_lot), True,
+                 _C_GREEN if lucro_lot >= 0 else _C_RED),
+            ]:
+                cl = ws.cell(linha, 1, label)
+                cl.font = _F_B10 if negrito else _F_N10
+                cv = ws.cell(linha, 2, val)
+                cv.font = _F_B10 if negrito else _F_N10
+                cv.alignment = Alignment(horizontal="right")
+                if cor_f:
+                    cl.fill = _fill(cor_f)
+                    cv.fill = _fill(cor_f)
+                linha += 1
+        else:
+            linha = _sec(ws, linha, "INVESTIDOR — EMPRÉSTIMO", ncols=3, altura=18)
+            custo_j_inv = r.get("custo_juros_investidor", 0) or 0
+            saldo_max_i = r.get("saldo_devedor_investidor_maximo", 0) or 0
+            saldo_fin_i = r.get("saldo_devedor_investidor_final", 0) or 0
+            for label, val, negrito, cor_f in [
+                ("Taxa de juros investidor",      f"{fin.taxa_juros_investidor_am:.2f}% a.m.", False, None),
+                ("Juros pagos ao investidor",     _fmt_rs(custo_j_inv), False, None),
+                ("Saldo devedor maximo",           _fmt_rs(saldo_max_i), False, None),
+                ("Saldo devedor remanescente",     _fmt_rs(saldo_fin_i), saldo_fin_i > 1,
+                 _C_RED if saldo_fin_i > 1 else None),
+            ]:
+                cl = ws.cell(linha, 1, label)
+                cl.font = _F_B10 if negrito else _F_N10
+                cv = ws.cell(linha, 2, val)
+                cv.font = _F_B10 if negrito else _F_N10
+                cv.alignment = Alignment(horizontal="right")
+                if cor_f:
+                    cl.fill = _fill(cor_f)
+                    cv.fill = _fill(cor_f)
+                linha += 1
+
     # Secao de reajustes monetarios (so quando ativo)
     if projeto.reajustes.ativo and (r.get("variacao_custo_obras_incc") or r.get("receita_correcao_total")):
         linha += 1
@@ -795,6 +842,9 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Amortizacao Financiamento":       "Amortização Financiamento",
         "Juros Financiamento Banco":       "Juros Financiamento (Banco)",
         "Comissao Abertura Financiamento": "Comissão Abertura Financiamento",
+        "Saque Investidor":                "Saque Investidor",
+        "Amortizacao Investidor":          "Amortização Investidor",
+        "Juros Investidor":                "Juros Investidor",
         "Total Saidas":                    "Total Saídas",
         "Saldo do Mes":                    "Saldo do Mês",
         "Saldo Acumulado":                 "Saldo Acumulado",
@@ -805,13 +855,14 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
     _ENTRADAS_COLS = [
         "Receita Nominal Venda", "Receita Financeira (Juros)",
         "Correcao Monetaria (Parcelas)", "Outras Receitas",
-        "Saque Financiamento",
+        "Saque Financiamento", "Saque Investidor",
     ]
     _SAIDAS_COLS = [
         "Aquisicao Terreno", "Cartorio", "Obras", "Projetos", "Licenciamento",
         "Marketing", "Outros Desenvolvimento", "Administracao",
         "Amortizacao Financiamento", "Juros Financiamento Banco",
-        "Comissao Abertura Financiamento", "Comissao", "Impostos", "Permuta Financeira",
+        "Comissao Abertura Financiamento", "Amortizacao Investidor", "Juros Investidor",
+        "Comissao", "Impostos", "Permuta Financeira",
     ]
 
     meses_lista = df["Mes"].tolist()

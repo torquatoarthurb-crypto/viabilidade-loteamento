@@ -1,13 +1,19 @@
 """
-Engine de financiamento bancario (A1 — saque automatico).
+Engine de financiamento: banco (CCB/CCE) e investidor (emprestimo ou % do negocio).
 
-O sistema identifica mes a mes os periodos de caixa negativo e saca
-automaticamente da linha de credito. Quando o caixa volta ao positivo
-(apos o periodo de carencia), amortiza o saldo devedor.
+Banco:
+- Auto-saque quando caixa < minimo e gatilho atingido.
+- Amortizacao quando caixa > minimo e passou carencia.
+- Tem comissao de abertura e IOF sobre cada saque.
 
-Resultado integrado ao fluxo de caixa como linhas separadas:
-  Entradas: Saque Financiamento
-  Saidas:   Amortizacao Financiamento | Juros Financiamento Banco | Comissao Abertura
+Investidor - Emprestimo:
+- Saca APENAS nas janelas em que o banco nao pode sacar (gatilho bancario nao atingido).
+- Se so o investidor estiver ativo (sem banco), saca livremente quando necessario.
+- Sem comissao e sem IOF. Taxa e carencia proprias.
+- Amortizacao segue a ordem configurada (banco_primeiro | investidor_primeiro).
+
+Investidor - % do negocio:
+- Nao afeta o fluxo de caixa; calculado no resumo da DRE apos apurar o lucro liquido.
 """
 
 from __future__ import annotations
@@ -15,6 +21,27 @@ from __future__ import annotations
 import numpy as np
 
 from ..modelos.financeiro import ConfigFinanciamento
+
+
+def _gatilho_banco_ok(
+    config: ConfigFinanciamento,
+    mes: int,
+    pct_vendas_acum,
+    pct_obras_acum,
+) -> bool:
+    """Retorna True se o gatilho do banco esta atingido no mes."""
+    tipo = getattr(config, "gatilho_tipo", "nenhum")
+    if tipo == "nenhum":
+        return True
+    v = float(pct_vendas_acum[mes]) if pct_vendas_acum is not None and mes < len(pct_vendas_acum) else 0.0
+    o = float(pct_obras_acum[mes]) if pct_obras_acum is not None and mes < len(pct_obras_acum) else 0.0
+    ok_v = v >= getattr(config, "gatilho_vendas_pct", 20.0)
+    ok_o = o >= getattr(config, "gatilho_obras_pct", 30.0)
+    if tipo == "vendas":
+        return ok_v
+    if tipo == "obras":
+        return ok_o
+    return ok_v and ok_o  # "ambos"
 
 
 def simular_financiamento(
@@ -25,113 +52,142 @@ def simular_financiamento(
     pct_obras_acum: np.ndarray | None = None,
 ) -> dict:
     """
-    Simula uso automatico de linha de credito bancaria.
+    Simula banco + investidor-emprestimo conforme config.
 
-    Args:
-        fluxo_base: saldo mensal sem financiamento (array de horizonte+1 elementos)
-        config: parametros da linha de credito
-        horizonte: numero de meses do projeto
-        pct_vendas_acum: % acumulado do VGV vendavel contratado por mes (0-100)
-        pct_obras_acum: % acumulado do custo de obras desembolsado por mes (0-100)
-
-    Returns:
-        dict com:
-        - saques: entradas de caixa da linha (R$/mes)
-        - amortizacoes: saidas de amortizacao do principal (R$/mes)
-        - juros_banco: saidas de juros ao banco (R$/mes)
-        - saldo_devedor: saldo devedor ao final de cada mes
-        - comissao_abertura: valor escalar da comissao (R$)
-        - saldo_devedor_final: saldo devedor remanescente ao fim do horizonte
-        - mes_gatilho: primeiro mes em que o gatilho foi atingido (-1 se nao ativo)
+    Retorna as chaves originais (banco) mais chaves novas para o investidor,
+    mantendo retrocompatibilidade com o fluxo_caixa.py.
     """
     n = horizonte + 1
-    saques = np.zeros(n)
-    amortizacoes = np.zeros(n)
-    juros_banco = np.zeros(n)
-    saldo_devedor_vec = np.zeros(n)
 
-    taxa_m = config.taxa_juros_am / 100
-    limite = config.limite_credito_valor  # 0 = sem limite
+    # Banco
+    saques_b = np.zeros(n)
+    amort_b = np.zeros(n)
+    juros_b = np.zeros(n)
+    saldo_b_vec = np.zeros(n)
+
+    # Investidor emprestimo
+    saques_i = np.zeros(n)
+    amort_i = np.zeros(n)
+    juros_i_vec = np.zeros(n)
+    saldo_i_vec = np.zeros(n)
+
+    taxa_b = config.taxa_juros_am / 100
+    taxa_i = getattr(config, "taxa_juros_investidor_am", 1.5) / 100
+    limite_b = config.limite_credito_valor
+    limite_i = getattr(config, "limite_investidor", 0.0)
+    car_b = config.periodo_carencia_meses
+    car_i = getattr(config, "carencia_investidor", 0)
     caixa_min = max(0.0, config.caixa_minimo)
-    saldo_devedor = 0.0
+    ordem = getattr(config, "ordem_amortizacao", "banco_primeiro")
+
+    ativo_inv = getattr(config, "ativo_investidor", False)
+    modo_inv = getattr(config, "modo_investidor", "pct_negocio")
+    inv_emp = ativo_inv and modo_inv == "emprestimo"
+
+    saldo_b = 0.0
+    saldo_i = 0.0
     saldo_caixa = 0.0
+    mes_gatilho = -1
 
-    # Comissao de abertura: cobrada em M0 se houver limite definido
+    # Comissao de abertura (banco, paga em M0)
     comissao = 0.0
-    if config.comissao_abertura_pct > 0 and limite > 0:
-        comissao = limite * config.comissao_abertura_pct / 100
-
-    # Pre-calcula se ha gatilho ativo
-    gatilho_tipo = getattr(config, "gatilho_tipo", "nenhum")
-    gatilho_vendas = getattr(config, "gatilho_vendas_pct", 20.0)
-    gatilho_obras = getattr(config, "gatilho_obras_pct", 30.0)
-    mes_gatilho = -1  # -1 = sem gatilho ou gatilho nunca atingido
+    if config.ativo and config.comissao_abertura_pct > 0 and limite_b > 0:
+        comissao = limite_b * config.comissao_abertura_pct / 100
 
     for mes in range(n):
-        # 1) Incorporar fluxo base do mes ao caixa do desenvolvedor
         saldo_caixa += fluxo_base[mes]
 
-        # 2) Pagar juros sobre saldo devedor atual
-        j = saldo_devedor * taxa_m
-        juros_banco[mes] = j
-        saldo_caixa -= j
+        # Juros sobre saldos devedores
+        j_b = saldo_b * taxa_b
+        juros_b[mes] = j_b
+        saldo_caixa -= j_b
 
-        # 3) Comissao de abertura no M0
+        j_i = saldo_i * taxa_i
+        juros_i_vec[mes] = j_i
+        saldo_caixa -= j_i
+
+        # Comissao M0
         if mes == 0 and comissao > 0:
             saldo_caixa -= comissao
 
-        # 4) Verificar gatilho de liberacao do financiamento
-        if gatilho_tipo == "nenhum":
-            linha_liberada = True
-        else:
-            v = float(pct_vendas_acum[mes]) if pct_vendas_acum is not None and mes < len(pct_vendas_acum) else 0.0
-            o = float(pct_obras_acum[mes]) if pct_obras_acum is not None and mes < len(pct_obras_acum) else 0.0
-            ok_vendas = v >= gatilho_vendas
-            ok_obras = o >= gatilho_obras
-            if gatilho_tipo == "vendas":
-                linha_liberada = ok_vendas
-            elif gatilho_tipo == "obras":
-                linha_liberada = ok_obras
-            else:  # "ambos"
-                linha_liberada = ok_vendas and ok_obras
-            if linha_liberada and mes_gatilho < 0:
-                mes_gatilho = mes
+        # Verificar gatilho do banco
+        banco_ok = config.ativo and _gatilho_banco_ok(config, mes, pct_vendas_acum, pct_obras_acum)
+        if banco_ok and mes_gatilho < 0:
+            mes_gatilho = mes
 
-        # 5) Se caixa abaixo do minimo e linha liberada: sacar da linha
-        if linha_liberada and saldo_caixa < caixa_min - 0.01:
+        # ---- Sacar se caixa abaixo do minimo ----
+        if saldo_caixa < caixa_min - 0.01:
             necessario = caixa_min - saldo_caixa
-            if limite <= 0:
-                saque = necessario
-            else:
-                disponivel = max(0.0, limite - saldo_devedor)
-                saque = min(necessario, disponivel)
 
-            if saque > 0:
-                iof = saque * (config.iof_pct / 100)
-                saldo_devedor += saque + iof
-                saques[mes] = saque
-                saldo_caixa += saque
+            # Banco saca quando gatilho atingido
+            if config.ativo and banco_ok:
+                if limite_b <= 0:
+                    saque = necessario
+                else:
+                    saque = min(necessario, max(0.0, limite_b - saldo_b))
+                if saque > 0:
+                    iof = saque * (config.iof_pct / 100)
+                    saldo_b += saque + iof
+                    saques_b[mes] = saque
+                    saldo_caixa += saque
+                    necessario = max(0.0, caixa_min - saldo_caixa)
 
-        # 6) Se caixa acima do minimo e passou carencia: amortizar so o excedente
+            # Investidor saca quando banco bloqueado (ou banco inativo)
+            inv_pode_sacar = inv_emp and (not config.ativo or not banco_ok)
+            if inv_pode_sacar and necessario > 0.01:
+                if limite_i <= 0:
+                    saque_i = necessario
+                else:
+                    saque_i = min(necessario, max(0.0, limite_i - saldo_i))
+                if saque_i > 0:
+                    saldo_i += saque_i  # sem IOF
+                    saques_i[mes] = saque_i
+                    saldo_caixa += saque_i
+
+        # ---- Amortizar excedente ----
         excedente = saldo_caixa - caixa_min
-        if (
-            excedente > 0.01
-            and saldo_devedor > 0.01
-            and mes >= config.periodo_carencia_meses
-        ):
-            amort = min(excedente, saldo_devedor)
-            amortizacoes[mes] = amort
-            saldo_devedor -= amort
-            saldo_caixa -= amort
+        if excedente > 0.01 and (saldo_b > 0.01 or saldo_i > 0.01):
+            if ordem == "banco_primeiro":
+                if saldo_b > 0.01 and mes >= car_b:
+                    a = min(excedente, saldo_b)
+                    amort_b[mes] = a
+                    saldo_b -= a
+                    saldo_caixa -= a
+                    excedente -= a
+                if inv_emp and saldo_i > 0.01 and excedente > 0.01 and mes >= car_i:
+                    a = min(excedente, saldo_i)
+                    amort_i[mes] = a
+                    saldo_i -= a
+                    saldo_caixa -= a
+            else:  # investidor_primeiro
+                if inv_emp and saldo_i > 0.01 and mes >= car_i:
+                    a = min(excedente, saldo_i)
+                    amort_i[mes] = a
+                    saldo_i -= a
+                    saldo_caixa -= a
+                    excedente -= a
+                if saldo_b > 0.01 and excedente > 0.01 and mes >= car_b:
+                    a = min(excedente, saldo_b)
+                    amort_b[mes] = a
+                    saldo_b -= a
+                    saldo_caixa -= a
 
-        saldo_devedor_vec[mes] = saldo_devedor
+        saldo_b_vec[mes] = saldo_b
+        saldo_i_vec[mes] = saldo_i
 
     return {
-        "saques": saques,
-        "amortizacoes": amortizacoes,
-        "juros_banco": juros_banco,
-        "saldo_devedor": saldo_devedor_vec,
+        # Banco (retrocompatibilidade)
+        "saques": saques_b,
+        "amortizacoes": amort_b,
+        "juros_banco": juros_b,
+        "saldo_devedor": saldo_b_vec,
         "comissao_abertura": comissao,
-        "saldo_devedor_final": saldo_devedor,
+        "saldo_devedor_final": saldo_b,
         "mes_gatilho": mes_gatilho,
+        # Investidor emprestimo
+        "saques_investidor": saques_i,
+        "amortizacoes_investidor": amort_i,
+        "juros_investidor": juros_i_vec,
+        "saldo_devedor_investidor": saldo_i_vec,
+        "saldo_devedor_investidor_final": saldo_i,
     }

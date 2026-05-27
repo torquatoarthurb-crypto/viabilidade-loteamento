@@ -321,8 +321,6 @@ def renderizar() -> None:
     cabecalho_aba(
         4,
         "Despesas de Loteamento",
-        "Custos com projetos, licenciamento, marketing e estrutura administrativa. "
-        "As alterações são salvas automaticamente.",
     )
 
     projeto = get_projeto()
@@ -342,10 +340,6 @@ def renderizar() -> None:
     # SECAO 1 — DESPESAS
     # ============================================================
     st.markdown("#### 1. Despesas de Loteamento")
-    st.caption(
-        "Projetos, licenciamento, marketing e outras despesas do empreendimento. "
-        "Para cada item: informe o valor total e distribua o desembolso por mes (soma deve ser 100%)."
-    )
 
     # Botoes de acao globais
     col_add, col_sel = st.columns([1, 3])
@@ -494,7 +488,6 @@ def renderizar() -> None:
                 'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição por intervalos</div>',
                 unsafe_allow_html=True,
             )
-            st.caption("Defina faixas com % e clique Aplicar.")
             atalhos_por_intervalos(f"despesa_{idx}", horizonte, chave_atl_desp)
 
             st.markdown(
@@ -520,11 +513,6 @@ def renderizar() -> None:
             despesa["categoria"] = nova_cat
             despesa["valor_total"] = novo_valor
             despesa["distribuicao"] = nova_distrib
-
-            col_sv, _ = st.columns([1, 3])
-            with col_sv:
-                if st.button("Salvar fluxo", key=f"desp_{idx}_salvar_fluxo", width="stretch", icon=":material/save:"):
-                    _autosave_aba4()
 
     # Remover despesas marcadas
     if indices_para_remover:
@@ -562,12 +550,7 @@ def renderizar() -> None:
     # CARD 2 — ADMINISTRACAO
     # ============================================================
     with st.container(border=True):
-        st.markdown("#### Estrutura Administrativa")
-        st.caption(
-            "% sobre a receita mensal do projeto. "
-            "Incide apenas quando ha receita, na mesma logica dos impostos. "
-            "Salvo automaticamente."
-        )
+        st.markdown("#### Gestão Financeira")
 
         col1, _ = st.columns([2, 3])
         with col1:

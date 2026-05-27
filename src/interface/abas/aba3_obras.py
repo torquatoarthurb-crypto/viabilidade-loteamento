@@ -149,19 +149,27 @@ def renderizar() -> None:
     horizonte = horizonte_visual_projeto(projeto)
     marcos = marcos_projeto(projeto)
 
-    # Areas de referencia — faixa compacta com 3 metricas
+    # Areas de referencia — bloco destacado
+    def _ref_html(label: str, valor: str) -> str:
+        return (
+            f'<div style="text-align:center;">'
+            f'<div style="font-size:10px;font-weight:700;color:#8A8880;letter-spacing:0.10em;'
+            f'text-transform:uppercase;margin-bottom:6px;">{label}</div>'
+            f'<div style="font-size:20px;font-weight:800;color:#1A1916;line-height:1;">{valor}</div>'
+            f'</div>'
+        )
     st.markdown(
-        '<div style="margin:0 0 8px;font-size:10px;font-weight:600;letter-spacing:0.10em;'
-        'text-transform:uppercase;color:var(--stone-500);">Áreas de referência</div>',
+        '<div style="background:#F0EEE9;border:1px solid #D8D4C8;border-radius:8px;'
+        'padding:14px 20px;margin:0 0 16px;display:grid;'
+        'grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:center;gap:0;">'
+        + _ref_html("Sistema Viário", f"{formatar_num(areas.area_sistema_viario_m2, 0)} m²")
+        + '<div style="background:#D8D4C8;height:36px;"></div>'
+        + _ref_html("Área de Lotes", f"{formatar_num(areas.area_lotes_m2, 0)} m²")
+        + '<div style="background:#D8D4C8;height:36px;"></div>'
+        + _ref_html("Gleba Total", f"{formatar_num(areas.area_gleba_m2, 0)} m²")
+        + '</div>',
         unsafe_allow_html=True,
     )
-    _ref_c1, _ref_c2, _ref_c3 = st.columns(3)
-    with _ref_c1:
-        st.metric("Sistema viário", f"{formatar_num(areas.area_sistema_viario_m2)} m²")
-    with _ref_c2:
-        st.metric("Área de lotes", f"{formatar_num(areas.area_lotes_m2)} m²")
-    with _ref_c3:
-        st.metric("Gleba total", f"{formatar_num(areas.area_gleba_m2)} m²")
 
     # ============================================================
     # MODO DO ORCAMENTO
@@ -169,15 +177,15 @@ def renderizar() -> None:
     # Pre-inicializa do modelo para que a volta ao modulo restaure o modo correto.
     # O widget usa session_state["aba3_modo"]; se nao estiver definido, usa obras.modo.
     if "aba3_modo" not in st.session_state:
-        st.session_state["aba3_modo"] = obras.modo
+        st.session_state["aba3_modo"] = "resumido"
 
     st.markdown("#### Modo do Orcamento")
     modo = st.radio(
         "Como voce quer inserir o orcamento?",
         options=["resumido", "detalhado"],
         format_func=lambda x: {
-            "resumido": "Resumido (R$/m² + tabela mensal unica)",
-            "detalhado": "Detalhado (lista de etapas com tabela mensal)",
+            "resumido": "Orçamento Paramétrico",
+            "detalhado": "Orçamento Executivo",
         }[x],
         horizontal=True,
         key="aba3_modo",
@@ -224,7 +232,6 @@ def renderizar() -> None:
             'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição mensal do desembolso</div>',
             unsafe_allow_html=True,
         )
-        st.caption("Defina intervalos com % e clique Aplicar.")
 
         # Ler/inicializar distribuicao do resumido (estado em sessao)
         chave_resumido = "aba3_resumido_distrib"
@@ -281,11 +288,6 @@ def renderizar() -> None:
                 f"M{_m_ini_res} → M{_m_fim_res}  |  {_dur_res} meses  |  "
                 f"desembolso mensal: `{_barras}`"
             )
-            st.caption(
-                "Início lento (mobilização) → aceleração no meio (pico de obras) "
-                "→ desaceleração no fim (acabamentos). "
-                "Ajuste mês a mês na tabela abaixo se necessário."
-            )
 
             if st.button(
                 "Aplicar curva",
@@ -310,11 +312,6 @@ def renderizar() -> None:
         )
         st.session_state[chave_resumido] = distrib_resumido
 
-        col_sv, _ = st.columns([1, 3])
-        with col_sv:
-            if st.button("Salvar fluxo", key="aba3_res_salvar", width="stretch", icon=":material/save:"):
-                salvar_fluxo = True
-
         valor_resumido_inputs = {
             "base_calculo": base,
             "valor_por_m2": valor_m2,
@@ -326,10 +323,6 @@ def renderizar() -> None:
     else:
         st.markdown("---")
         st.markdown("#### Etapas de Obra")
-        st.caption(
-            "Cada etapa tem sua propria tabela mensal. Adicione as etapas necessarias "
-            "(terraplenagem, drenagem, pavimentacao, etc.). A soma de cada etapa deve ser 100%."
-        )
 
         _garantir_estado_etapas()
         etapas_estado = st.session_state[CHAVE_ETAPAS]
@@ -376,10 +369,6 @@ def renderizar() -> None:
                 barra  = " " * offset + "█" * width
                 cols[2].caption(f"`{barra}` M{m_abs_ini}–M{m_abs_fim}")
 
-            st.caption(
-                "Os percentuais de custo são indicativos. "
-                "Após aplicar, ajuste os valores (R$) de cada etapa conforme seu orçamento."
-            )
 
             col_sub, col_add_t, _ = st.columns([1, 1, 2])
             with col_sub:
@@ -485,7 +474,6 @@ def renderizar() -> None:
                     'text-transform:uppercase;color:var(--stone-500);margin:10px 0 4px;">Distribuição por intervalos</div>',
                     unsafe_allow_html=True,
                 )
-                st.caption("Defina faixas com % e clique Aplicar.")
                 atalhos_por_intervalos(f"etapa_{idx}", horizonte, chave_atl_etapa)
 
                 # Tabela mensal
@@ -504,11 +492,6 @@ def renderizar() -> None:
                 etapa["nome"] = novo_nome
                 etapa["valor_total"] = novo_valor
                 etapa["distribuicao"] = nova_distrib
-
-                col_sv, _ = st.columns([1, 3])
-                with col_sv:
-                    if st.button("Salvar fluxo", key=f"etapa_{idx}_salvar", width="stretch", icon=":material/save:"):
-                        salvar_fluxo = True
 
         if indices_para_remover:
             for idx in sorted(indices_para_remover, reverse=True):
@@ -553,10 +536,6 @@ def renderizar() -> None:
             )
 
         multiplicador = (1 + bdi / 100) * (1 + contingencia / 100)
-        st.caption(
-            f"Custo total = custo_direto × (1 + {bdi:.2f}%) × (1 + {contingencia:.2f}%) "
-            f"= custo_direto × {multiplicador:.4f}"
-        )
 
         # B1: benchmarks de custo por m² e por lote
         if modo == "resumido":
@@ -574,33 +553,35 @@ def renderizar() -> None:
             _lotes = float(areas.area_lotes_m2) or 1.0
             _n_lotes = projeto.terreno.total_lotes or 1
 
+            def _ind_obra_html(label: str, valor: str) -> str:
+                return (
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:10px;font-weight:700;color:#8A8880;letter-spacing:0.10em;'
+                    f'text-transform:uppercase;margin-bottom:6px;">{label}</div>'
+                    f'<div style="font-size:18px;font-weight:800;color:#1A1916;line-height:1;">{valor}</div>'
+                    f'</div>'
+                )
+
             st.markdown(
-                '<div style="margin:14px 0 8px;font-size:10px;font-weight:600;'
+                '<div style="margin:14px 0 4px;font-size:10px;font-weight:600;'
                 'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
-                'Benchmarks com BDI e Contingência</div>',
+                'Índices da Obra</div>',
                 unsafe_allow_html=True,
             )
-            _bc1, _bc2, _bc3, _bc4 = st.columns(4)
-            with _bc1:
-                st.metric("Custo total obras", formatar_brl(_custo_total_bdi))
-            with _bc2:
-                st.metric(
-                    "R$/m² de gleba",
-                    formatar_num(_custo_total_bdi / _gleba, 2),
-                    help="Benchmark: obras de infraestrutura de loteamento tipicamente R$ 80-200/m² de gleba.",
-                )
-            with _bc3:
-                st.metric(
-                    "R$/m² de lote",
-                    formatar_num(_custo_total_bdi / _lotes, 2),
-                    help="Benchmark: R$ 100-250/m² de area de lotes.",
-                )
-            with _bc4:
-                st.metric(
-                    "R$/lote",
-                    formatar_brl(_custo_total_bdi / _n_lotes),
-                    help="Custo medio de obras por unidade.",
-                )
+            st.markdown(
+                '<div style="background:#F0EEE9;border:1px solid #D8D4C8;border-radius:8px;'
+                'padding:14px 20px;margin:0 0 4px;display:grid;'
+                'grid-template-columns:1fr 1px 1fr 1px 1fr 1px 1fr;align-items:center;gap:0;">'
+                + _ind_obra_html("Custo Total Obras", formatar_brl(_custo_total_bdi))
+                + '<div style="background:#D8D4C8;height:36px;"></div>'
+                + _ind_obra_html("R$/m² de Gleba", formatar_num(_custo_total_bdi / _gleba, 2))
+                + '<div style="background:#D8D4C8;height:36px;"></div>'
+                + _ind_obra_html("R$/m² de Lote", formatar_num(_custo_total_bdi / _lotes, 2))
+                + '<div style="background:#D8D4C8;height:36px;"></div>'
+                + _ind_obra_html("R$/Lote", formatar_brl(_custo_total_bdi / _n_lotes))
+                + '</div>',
+                unsafe_allow_html=True,
+            )
 
     # ============================================================
     # ARMAZENAR ESTADO PARA SINCRONIZACAO (sidebar / Calcular)

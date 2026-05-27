@@ -418,11 +418,6 @@ def _renderizar_cenarios_tipologia(
     )
 
     with st.expander("Cenários de velocidade de vendas", expanded=not bool(curva)):
-        st.caption(
-            "Selecione um cenário como ponto de partida. "
-            "Ajuste na tabela mensal conforme a expectativa de mercado."
-        )
-
         nomes = [c["nome"] for c in _CENARIOS_VENDA]
         sel_idx = st.selectbox(
             "Cenário",
@@ -476,7 +471,6 @@ def _renderizar_curva_tipologia(
 
     st.markdown("---")
     st.markdown("**Atalhos por faixa:**")
-    st.caption("Defina faixas com % do estoque, clique Aplicar.")
     atalhos_por_intervalos(f"curva2_{safe}", horizonte, f"_curva2_res_{safe}")
 
     # Grafico read-only
@@ -490,14 +484,6 @@ def _renderizar_curva_tipologia(
         st.info("Nenhum mês preenchido ainda.")
     else:
         st.warning(f"Soma: {soma_curva:.2f}% — deve ser 100%")
-
-    # Ajuste manual
-    with st.expander("Ajuste manual mês a mês", expanded=False):
-        nova_curva = _tabela_manual_curva(curva, safe, horizonte, marcos)
-        if nova_curva is not None:
-            curva.clear()
-            curva.update(nova_curva)
-            mudou = True
 
     return mudou
 
@@ -643,11 +629,6 @@ def _renderizar_preco_progressivo(ft_lista: list[dict], horizonte: int) -> bool:
         st.session_state[CHAVE_BANDAS] = bandas
 
     lista_atual: list[dict] = st.session_state[CHAVE_BANDAS]
-
-    st.caption(
-        "Fator 1,00 = preço padrão | 0,95 = –5% | 1,10 = +10%. "
-        "Aplicado igualmente a todas as tipologias."
-    )
 
     _BR_HASH_KEY = "aba2_br_hash"
     _br_hash = str(sorted(str(b) for b in lista_atual))
@@ -830,11 +811,6 @@ def renderizar() -> None:
     # ============================================================
     with st.container(border=True):
         st.markdown("#### Recebíveis e Curva de Vendas por Tipologia")
-        st.caption(
-            "Cada tipologia tem um fluxo de recebíveis próprio (sinal + parcelas obra + balões + "
-            "financiamento, devem somar 100%) e sua curva de vendas mensal (deve somar 100%). "
-            "O fluxo de caixa final é a soma de todos os fluxos."
-        )
 
         for i, tip in enumerate(tipologias):
             ft = next((f for f in ft_lista if f["nome_tipologia"] == tip.nome), None)
@@ -875,13 +851,8 @@ def renderizar() -> None:
     # ============================================================
     # CARD 3 — OUTRAS RECEITAS
     # ============================================================
-    salvar_outras = False
     with st.container(border=True):
         st.markdown("#### Outras Receitas")
-        st.caption(
-            "Aportes de investidores, receitas financeiras, venda de ativos e outras entradas "
-            "não relacionadas à venda de lotes. Incluídas diretamente no fluxo de caixa."
-        )
 
         outras_estado: list[dict] = st.session_state[CHAVE_OUTRAS_RECEITAS]
 
@@ -985,15 +956,6 @@ def renderizar() -> None:
 
         outras_estado[:] = _sync_outras
 
-        col_sv_o, _ = st.columns([1, 3])
-        with col_sv_o:
-            salvar_outras = st.button(
-                "Salvar outras receitas",
-                key="aba2_salvar_outras",
-                width="stretch",
-                icon=":material/save:",
-            )
-
     # ============================================================
     # SALVAR ABA
     # ============================================================
@@ -1016,7 +978,7 @@ def renderizar() -> None:
     # ============================================================
     # AUTO-SAVE
     # ============================================================
-    if mudou or salvar_outras or salvar_aba2:
+    if mudou or salvar_aba2:
         _executar_save_aba2(
             ft_lista, projeto, receitas,
             outras_estado=st.session_state.get(CHAVE_OUTRAS_RECEITAS),

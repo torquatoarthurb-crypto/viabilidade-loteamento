@@ -37,13 +37,9 @@ def renderizar() -> None:
     ind = resultado.indicadores
 
     _renderizar_cascata_dre(r)
-    _renderizar_cards_margem(r, ind)
 
     st.markdown("---")
     _renderizar_composicao_saidas(r)
-
-    st.markdown("---")
-    _renderizar_nominal_vs_financeiro(r)
 
 
 # =====================================================================
@@ -156,7 +152,7 @@ def _renderizar_cascata_dre(r: dict) -> None:
         linha_resultado,
     ]
 
-    # Item 9: custo do financiamento bancario na DRE (quando ativo)
+    # Custo do financiamento bancario na DRE (quando ativo)
     custo_fin = r.get("custo_financiamento_total", 0) or 0
     if custo_fin > 1:
         lucro_com_fin = lucro - custo_fin
@@ -177,6 +173,32 @@ def _renderizar_cascata_dre(r: dict) -> None:
                 f'<td>{formatar_brl(lucro_com_fin)}</td>'
                 f'<td>{pct_vv(lucro_com_fin)}</td>'
                 f'<td>{pct_vb(lucro_com_fin)}</td>'
+                f'</tr>'
+            ),
+        ])
+
+    # Investidor % do negocio — split do lucro liquido na DRE
+    if r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio":
+        lucro_inv = r.get("lucro_investidor", 0) or 0
+        lucro_lot = r.get("lucro_loteadora", 0) or 0
+        pct_inv = r.get("investidor_pct_negocio", 0) or 0
+        classe_lot = "dre-row-resultado" + ("" if lucro_lot >= 0 else " negativo")
+        partes.extend([
+            separador(),
+            (
+                f'<tr class="dre-row-deduction">'
+                f'<td>&nbsp;&nbsp;&nbsp;(-) Participacao Investidor ({pct_inv:.0f}% do lucro)</td>'
+                f'<td>({formatar_brl(lucro_inv)})</td>'
+                f'<td>({pct_vv(lucro_inv)})</td>'
+                f'<td>({pct_vb(lucro_inv)})</td>'
+                f'</tr>'
+            ),
+            (
+                f'<tr class="{classe_lot}">'
+                f'<td>Resultado Loteadora (apos split)</td>'
+                f'<td>{formatar_brl(lucro_lot)}</td>'
+                f'<td>{pct_vv(lucro_lot)}</td>'
+                f'<td>{pct_vb(lucro_lot)}</td>'
                 f'</tr>'
             ),
         ])

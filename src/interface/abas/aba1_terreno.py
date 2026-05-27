@@ -16,6 +16,7 @@ from ...modelos import (
     Aba3Obras,
     DatasProjeto,
     InfoEmpreendimento,
+    ParametrosFinanceiros,
     QuadroAreas,
     Tipologia,
 )
@@ -56,7 +57,7 @@ def _extrair_coords_gmaps(url: str) -> tuple[float, float] | None:
 
 
 def _parsear_kmz(arquivo) -> list[list[float]] | None:
-    """Parseia KMZ ou KML e retorna lista de [lat, lon] do primeiro poligono/linha encontrado."""
+    """Parseia KMZ ou KML e retorna lista de [lat, lon] da poligonal completa."""
     import zipfile, io, xml.etree.ElementTree as ET
     try:
         conteudo = arquivo.read()
@@ -69,21 +70,44 @@ def _parsear_kmz(arquivo) -> list[list[float]] | None:
         else:
             kml_bytes = conteudo
         root = ET.fromstring(kml_bytes)
-        _NS = "http://www.opengis.net/kml/2.2"
-        for tag in (f"{{{_NS}}}Polygon", f"{{{_NS}}}LinearRing", f"{{{_NS}}}LineString"):
-            for elem in root.iter(tag):
-                coords_el = elem.find(f".//{{{_NS}}}coordinates")
-                if coords_el is not None and coords_el.text:
-                    pontos: list[list[float]] = []
-                    for part in coords_el.text.strip().split():
-                        partes = part.split(",")
-                        if len(partes) >= 2:
-                            try:
-                                pontos.append([float(partes[1]), float(partes[0])])
-                            except ValueError:
-                                continue
+        # Tenta múltiplos namespaces KML (2.2, 2.1, sem namespace)
+        _NS_OPTS = [
+            "http://www.opengis.net/kml/2.2",
+            "http://earth.google.com/kml/2.1",
+            "",
+        ]
+        def _tag(ns: str, name: str) -> str:
+            return f"{{{ns}}}{name}" if ns else name
+
+        def _parse_coords(text: str) -> list[list[float]]:
+            pontos: list[list[float]] = []
+            for part in text.strip().split():
+                partes = part.split(",")
+                if len(partes) >= 2:
+                    try:
+                        pontos.append([float(partes[1]), float(partes[0])])
+                    except ValueError:
+                        continue
+            return pontos
+
+        for _NS in _NS_OPTS:
+            # Prefere outer boundary de Polygon para ler a poligonal completa
+            for poly in root.iter(_tag(_NS, "Polygon")):
+                outer = poly.find(f".//{_tag(_NS, 'outerBoundaryIs')}//{_tag(_NS, 'coordinates')}")
+                if outer is None:
+                    outer = poly.find(f".//{_tag(_NS, 'coordinates')}")
+                if outer is not None and outer.text:
+                    pontos = _parse_coords(outer.text)
                     if pontos:
                         return pontos
+            # Fallback: LineString ou LinearRing genérico
+            for tag in (_tag(_NS, "LinearRing"), _tag(_NS, "LineString")):
+                for elem in root.iter(tag):
+                    coords_el = elem.find(f".//{_tag(_NS, 'coordinates')}")
+                    if coords_el is not None and coords_el.text:
+                        pontos = _parse_coords(coords_el.text)
+                        if pontos:
+                            return pontos
         return None
     except Exception:
         return None
@@ -245,6 +269,7 @@ def renderizar() -> None:
 
     projeto = get_projeto()
     terreno = projeto.terreno
+    parametros = projeto.parametros
 
     # ============================================================
     # CARD 1 — IDENTIFICACAO
@@ -300,11 +325,6 @@ def renderizar() -> None:
         link_maps: str = terreno.info.link_maps or ""
 
         with st.expander("Localização no mapa (opcional)", expanded=False):
-            st.caption(
-                "Importe um KMZ/KML com o polígono da área, cole o link do Google Maps, "
-                "ou informe as coordenadas manualmente."
-            )
-
             # KMZ / KML import
             _kmz_upload = st.file_uploader(
                 "Importar área delimitada (KMZ/KML)",
@@ -401,10 +421,7 @@ def renderizar() -> None:
                     import streamlit.components.v1 as _stc_loc
                     _stc_loc.iframe(_osm_url, height=300, scrolling=False)
             else:
-                st.info(
-                    "Importe um KMZ, cole um link do Google Maps ou informe as coordenadas "
-                    "para ver o mapa de localização."
-                )
+                pass
 
     # ============================================================
     # CARD 2 — QUADRO DE AREAS
@@ -541,37 +558,41 @@ def renderizar() -> None:
                         min_value=0.0,
                     )
 
-        # Indicadores de aproveitamento — secao de resultados destacada
+        # Indicadores de aproveitamento — bloco destacado com 3 índices
         if area_gleba > 0:
+            _aprov_pct = area_lotes / area_gleba * 100
+            _viario_gleba_pct = area_viario / area_gleba * 100 if area_gleba > 0 else 0
+            _viario_lotes_pct = area_viario / area_lotes * 100 if area_lotes > 0 else 0
+
+            def _ind_html(label: str, valor: str, sub: str) -> str:
+                return (
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:10px;font-weight:700;color:#8A8880;'
+                    f'letter-spacing:0.10em;text-transform:uppercase;margin-bottom:6px;">{label}</div>'
+                    f'<div style="font-size:22px;font-weight:800;color:#1A1916;'
+                    f'-webkit-text-stroke:0.3px #1A1916;line-height:1;">{valor}</div>'
+                    f'<div style="font-size:11px;color:#5A5650;margin-top:4px;">{sub}</div>'
+                    f'</div>'
+                )
+
             st.markdown(
-                '<div style="margin:14px 0 8px;font-size:10px;font-weight:600;'
-                'letter-spacing:0.10em;text-transform:uppercase;color:var(--stone-500);">'
-                'Indicadores de aproveitamento</div>',
+                '<div style="background:#F0EEE9;border:1px solid #D8D4C8;border-radius:8px;'
+                'padding:16px 20px;margin:14px 0 4px;display:grid;'
+                'grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:center;gap:0;">'
+                + _ind_html("Área de Lotes / Gleba", f"{_aprov_pct:.1f}%", "aproveitamento")
+                + '<div style="background:#D8D4C8;height:36px;"></div>'
+                + _ind_html("Viário / Gleba", f"{_viario_gleba_pct:.1f}%", "infraestrutura viária")
+                + '<div style="background:#D8D4C8;height:36px;"></div>'
+                + _ind_html("Viário / Lotes", f"{_viario_lotes_pct:.1f}%", "relação viário ÷ área vendável")
+                + '</div>',
                 unsafe_allow_html=True,
             )
-            _aprov = area_lotes / area_gleba * 100
-            _infra = area_outras / area_gleba * 100
-            _col_m1, _col_m2, _col_m3 = st.columns(3)
-            with _col_m1:
-                st.metric("Aproveitamento", f"{_aprov:.1f}%",
-                          help="% da gleba destinada a lotes (area vendavel)")
-            with _col_m2:
-                st.metric("Infraestrutura", f"{_infra:.1f}%",
-                          help="Sistema viario + areas verdes + institucional + APP")
-            with _col_m3:
-                _rel = area_lotes / area_viario if area_viario > 0 else 0
-                st.metric("Lotes / Viario", f"{_rel:.2f}x",
-                          help="Eficiencia: quanto de area vendavel por m² de viario")
 
     # ============================================================
     # CARD 3 — DATAS-CHAVE DO PROJETO
     # ============================================================
     with st.container(border=True):
         st.markdown("#### Datas-chave do Projeto")
-        st.caption(
-            "Termino do projeto e calculado automaticamente: maior valor entre o termino "
-            "de obras e (data da ultima parcela + 2 meses)."
-        )
 
         obras = projeto.obras
         duracao_calculada_meses = _calcular_duracao_obras(obras)
@@ -610,17 +631,23 @@ def renderizar() -> None:
             if _override is not None:
                 st.session_state["aba1_duracao_obras"] = int(_override)
 
+            st.markdown("**Duração das obras (meses)**")
             duracao_obras_meses = int(st.number_input(
                 "Duração das obras (meses)",
                 value=_dur_modelo,
                 min_value=1,
                 step=1,
                 key="aba1_duracao_obras",
-                help="Contado a partir do início das obras. "
-                     "O término é calculado automaticamente.",
+                help="Contado a partir do início das obras.",
+                label_visibility="collapsed",
             ))
             termino_obras = _add_meses(inicio_obras, duracao_obras_meses)
-            st.caption(f"Término de obras: **{termino_obras.strftime('%m/%Y')}**")
+            st.markdown(
+                f'**Término de obras** &nbsp; '
+                f'<span style="font-family:\'DM Mono\',monospace;font-size:14px;color:#1A1916;">'
+                f'{termino_obras.strftime("%m/%Y")}</span>',
+                unsafe_allow_html=True,
+            )
 
             if duracao_calculada_meses is not None and duracao_calculada_meses > duracao_obras_meses:
                 st.info(
@@ -661,7 +688,7 @@ def renderizar() -> None:
     _TIP_HASH_KEY = "aba1_tip_proj_hash"
 
     def _tip_hash(tips: list) -> str:
-        return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario, t.gio_percentual)
+        return str([(t.nome, t.quantidade, t.area_lote_m2, t.modo_preco, t.valor_unitario)
                     for t in tips])
 
     _proj_hash = _tip_hash(terreno.tipologias)
@@ -673,7 +700,7 @@ def renderizar() -> None:
                 "area_m2": t.area_lote_m2,
                 "modo": t.modo_preco,
                 "valor": t.valor_unitario,
-                "agio_pct": t.gio_percentual,
+                "agio_pct": 0.0,
             }
             for t in terreno.tipologias
         ]
@@ -686,12 +713,20 @@ def renderizar() -> None:
 
     with st.container(border=True):
         st.markdown("#### Tipologias de Lote")
-        st.caption("Adicione, edite ou remova tipologias na tabela abaixo.")
 
-        _col_w = [3, 0.8, 1.2, 1.4, 1.8, 0.8, 1.4, 2.4, 0.5]
+        _area_por_total = st.checkbox(
+            "Inserir área total da tipologia (em vez de área por lote)",
+            value=st.session_state.get("aba1_area_por_total", False),
+            key="aba1_area_por_total",
+            help="Quando ativado, informe a área total dos lotes. A área por lote é calculada automaticamente (÷ quantidade).",
+        )
+
+        _col_w = [3, 0.8, 1.2, 1.4, 1.8, 1.4, 2.4, 0.5]
+        _area_col_label = "Área total (m²)" if _area_por_total else "Área/lote (m²)"
         if lista:
             _hcols = st.columns(_col_w)
-            _hlabels = ["Nome", "Qtd", "Área (m²)", "Modo", "Valor unit. (R$)", "Ágio (%)", "Área total", "VGV", ""]
+            _area_res_label = "Média/lote (m²)" if _area_por_total else "Área total"
+            _hlabels = ["Nome", "Qtd", _area_col_label, "Modo", "Valor unit. (R$)", _area_res_label, "VGV", ""]
             for _hc, _hl in zip(_hcols, _hlabels):
                 with _hc:
                     st.markdown(
@@ -716,11 +751,19 @@ def renderizar() -> None:
                     key=f"_tipr_{i}_qtd", label_visibility="collapsed",
                 )
             with _cw[2]:
-                _area_i = numero_brl(
-                    "area", value=float(_item["area_m2"]),
-                    key=f"_tipr_{i}_area", min_value=0.0, casas=2,
-                    label_visibility="collapsed",
-                )
+                if _area_por_total:
+                    _area_total_inp = numero_brl(
+                        "area_total", value=float(_item["area_m2"]) * max(int(_item["qtd"]), 1),
+                        key=f"_tipr_{i}_area", min_value=0.0, casas=2,
+                        label_visibility="collapsed",
+                    )
+                    _area_i = _area_total_inp / max(int(_qtd_i), 1)
+                else:
+                    _area_i = numero_brl(
+                        "area", value=float(_item["area_m2"]),
+                        key=f"_tipr_{i}_area", min_value=0.0, casas=2,
+                        label_visibility="collapsed",
+                    )
             with _cw[3]:
                 _modo_i = st.selectbox(
                     "modo", options=["por_m2", "por_lote"],
@@ -733,29 +776,24 @@ def renderizar() -> None:
                     key=f"_tipr_{i}_valor", min_value=0.0, casas=2,
                     label_visibility="collapsed",
                 )
-            with _cw[5]:
-                _agio_i = numero_brl(
-                    "agio", value=float(_item["agio_pct"]),
-                    key=f"_tipr_{i}_agio", min_value=0.0, casas=1,
-                    label_visibility="collapsed",
-                )
             _area_tot_i = float(_qtd_i) * _area_i
             _preco_base_i = _area_i * _valor_i if _modo_i == "por_m2" else _valor_i
-            _vgv_i = float(_qtd_i) * _preco_base_i * (1 + _agio_i / 100)
-            _area_tot_fmt = f"{int(round(_area_tot_i)):,}".replace(",", ".")
-            with _cw[6]:
+            _vgv_i = float(_qtd_i) * _preco_base_i
+            _area_res_val = _area_i if _area_por_total else _area_tot_i
+            _area_res_fmt = f"{_area_res_val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            with _cw[5]:
                 st.markdown(
                     f'<div style="padding:7px 0 0 0;font-size:12px;'
-                    f'font-family:\'DM Mono\',monospace;color:var(--stone-700);">{_area_tot_fmt} m²</div>',
+                    f'font-family:\'DM Mono\',monospace;color:var(--stone-700);">{_area_res_fmt} m²</div>',
                     unsafe_allow_html=True,
                 )
-            with _cw[7]:
+            with _cw[6]:
                 st.markdown(
                     f'<div style="padding:7px 0 0 0;font-size:12px;'
                     f'font-family:\'DM Mono\',monospace;color:var(--stone-700);">{formatar_brl(_vgv_i)}</div>',
                     unsafe_allow_html=True,
                 )
-            with _cw[8]:
+            with _cw[7]:
                 if st.button(
                     "×", key=f"_tipr_{i}_del",
                     icon=":material/delete:",
@@ -769,7 +807,7 @@ def renderizar() -> None:
                 "area_m2": float(_area_i),
                 "modo": str(_modo_i),
                 "valor": float(_valor_i),
-                "agio_pct": float(_agio_i),
+                "agio_pct": 0.0,
             })
 
         if _idx_remover is not None:
@@ -793,30 +831,6 @@ def renderizar() -> None:
             st.session_state[_TIP_LISTA_KEY] = lista_atual
             st.session_state[_TIP_HASH_KEY] = _proj_hash
             st.rerun()
-
-        _nomes_tip = [d["nome"] for d in lista_atual if d["nome"]]
-        if _nomes_tip:
-            _c_dup_sel, _c_dup_btn = st.columns([3, 1])
-            with _c_dup_sel:
-                _nome_dup = st.selectbox(
-                    "Duplicar tipologia", options=_nomes_tip, key="aba1_dup_sel",
-                )
-            with _c_dup_btn:
-                st.write("")
-                if st.button(
-                    "Duplicar", key="aba1_btn_dup", width="stretch",
-                    icon=":material/content_copy:",
-                    help="Cria uma cópia da tipologia selecionada com os mesmos valores",
-                ):
-                    _fonte_dup = next((d for d in lista_atual if d["nome"] == _nome_dup), None)
-                    if _fonte_dup is not None:
-                        lista_atual.append({**_fonte_dup, "nome": f"{_nome_dup} (copia)"})
-                        for _k in list(st.session_state.keys()):
-                            if "_tipr_" in _k:
-                                del st.session_state[_k]
-                        st.session_state[_TIP_LISTA_KEY] = lista_atual
-                        st.session_state[_TIP_HASH_KEY] = _proj_hash
-                        st.rerun()
 
         _tip_editadas: list[Tipologia] = []
         _tip_errors: list[str] = []
@@ -875,44 +889,49 @@ def renderizar() -> None:
             except Exception:
                 continue
 
-        col_v, col_l, col_a = st.columns(3)
-        with col_v:
-            st.metric("VGV Total Bruto", formatar_brl(vgv_total))
-        with col_l:
-            st.metric("Total de Lotes", str(total_lotes))
-        with col_a:
-            if area_lotes > 0:
-                saldo = area_lotes - area_usada
-                ok = saldo >= 0
-                icone = "✓" if ok else "✕"
-                st.metric(
-                    f"{icone} Area de lotes",
-                    f"{formatar_num(area_usada, 0)} m²",
-                )
-                if ok:
-                    st.caption(
-                        f"Disponivel: {formatar_num(saldo, 0)} m² "
-                        f"de {formatar_num(area_lotes, 0)} m²"
-                    )
-                    # B6: aviso de sub-utilizacao
-                    if saldo > area_lotes * 0.02:
-                        st.info(
-                            f"{formatar_num(saldo, 0)} m² sem tipologia ({saldo / area_lotes * 100:.1f}%). "
-                            "Verifique se todas as tipologias foram cadastradas."
-                        )
-                else:
-                    st.warning(
-                        f"Excedeu em {formatar_num(-saldo, 0)} m² "
-                        f"o limite de {formatar_num(area_lotes, 0)} m²"
-                    )
-            else:
-                st.metric("Area usada pelas tipologias", f"{formatar_num(area_usada, 0)} m²")
+        # Resultados destacados em bloco (mesmo padrão dos indicadores de aproveitamento)
+        _area_usada_fmt = formatar_num(area_usada, 0) + " m²"
+        if area_lotes > 0:
+            _saldo = area_lotes - area_usada
+            _area_sub = (
+                f"de {formatar_num(area_lotes, 0)} m² disponíveis"
+                if _saldo >= 0
+                else f"<span style='color:#EF4444;'>Excedeu {formatar_num(-_saldo, 0)} m²</span>"
+            )
+        else:
+            _area_sub = "área de lotes não configurada"
 
-        # A1: barra de progresso do fechamento de area
+        def _res_html(label: str, valor: str, sub: str) -> str:
+            return (
+                f'<div style="text-align:center;">'
+                f'<div style="font-size:10px;font-weight:700;color:#8A8880;'
+                f'letter-spacing:0.10em;text-transform:uppercase;margin-bottom:6px;">{label}</div>'
+                f'<div style="font-size:18px;font-weight:700;color:#1A1916;line-height:1;">{valor}</div>'
+                f'<div style="font-size:11px;color:#5A5650;margin-top:4px;">{sub}</div>'
+                f'</div>'
+            )
+
+        st.markdown(
+            '<div style="background:#F0EEE9;border:1px solid #D8D4C8;border-radius:8px;'
+            'padding:14px 20px;margin:10px 0 4px;display:grid;'
+            'grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:center;gap:0;">'
+            + _res_html("VGV Total Bruto", formatar_brl(vgv_total), "&nbsp;")
+            + '<div style="background:#D8D4C8;height:36px;"></div>'
+            + _res_html("Total de Lotes", str(total_lotes), "unidades")
+            + '<div style="background:#D8D4C8;height:36px;"></div>'
+            + _res_html("Área de Lotes", _area_usada_fmt, _area_sub)
+            + '</div>',
+            unsafe_allow_html=True,
+        )
+
+        if area_lotes > 0 and (_saldo := area_lotes - area_usada) < 0:
+            st.warning(f"Área das tipologias excede em {formatar_num(-_saldo, 0)} m² o limite de {formatar_num(area_lotes, 0)} m²")
+
+        # A1: barra de progresso — vermelha enquanto incompleta, verde quando 100%
         if area_lotes > 0:
             _frac = area_usada / area_lotes
             _bar_w = min(_frac * 100, 100)
-            _cor_bar = "#22C55E" if _frac <= 1.0 else "#EF4444"
+            _cor_bar = "#22C55E" if _frac >= 1.0 else "#EF4444"
             _label_bar = (
                 f"{formatar_num(area_usada, 0)} de {formatar_num(area_lotes, 0)} m²"
                 f" ({_frac * 100:.1f}%)"
@@ -926,6 +945,32 @@ def renderizar() -> None:
                 f'</div>'
                 f'<div style="font-size:11px;font-family:\'DM Mono\',monospace;color:{_cor_bar};margin-top:4px;">{_label_bar}</div>'
                 f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ============================================================
+    # TMA
+    # ============================================================
+    with st.container(border=True):
+        st.markdown("#### Taxa Mínima de Atratividade (TMA)")
+        _col_tma1, _col_tma2 = st.columns(2)
+        with _col_tma1:
+            tma_anual = numero_brl(
+                "TMA (% ao ano)",
+                value=float(parametros.tma_anual),
+                key="aba1_tma",
+                min_value=0.0,
+                help="Pratica de mercado:\n"
+                     "• Conservador: 8-12% a.a. (Selic ou CDI)\n"
+                     "• Moderado: 12-15% a.a.\n"
+                     "• Agressivo: 15-20% a.a.",
+            )
+        with _col_tma2:
+            _tma_mensal = (1 + tma_anual / 100) ** (1 / 12) - 1
+            st.markdown('<div style="height:28px;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:11px;color:#9CA3AF;">Equivalente mensal</div>'
+                f'<div style="font-size:13px;font-weight:600;">{_tma_mensal * 100:.4f} % a.m.</div>',
                 unsafe_allow_html=True,
             )
 
@@ -960,6 +1005,7 @@ def renderizar() -> None:
         or atual.datas.inicio_obras != inicio_obras
         or atual.datas.termino_obras != termino_obras
         or _tip_dirty
+        or abs(parametros.tma_anual - tma_anual) > 0.001
     )
 
     # Staged: persiste valores atuais para sincronizar_aba1 usar antes do Calcular
@@ -974,6 +1020,7 @@ def renderizar() -> None:
         "lancamento": lancamento, "inicio_obras": inicio_obras,
         "termino_obras": termino_obras,
         "tipologias": _tip_editadas if _tip_editadas else list(atual.tipologias),
+        "tma_anual": tma_anual,
     }
 
     st.markdown("---")
@@ -1021,7 +1068,10 @@ def renderizar() -> None:
                 ),
                 tipologias=_tips_save,
             )
-            set_projeto(projeto.model_copy(update={"terreno": novo_terreno}))
+            set_projeto(projeto.model_copy(update={
+                "terreno": novo_terreno,
+                "parametros": ParametrosFinanceiros(tma_anual=tma_anual),
+            }))
             invalidar_resultado()
             if _tip_dirty:
                 st.session_state[_TIP_HASH_KEY] = _tip_atual_hash
@@ -1064,8 +1114,14 @@ def sincronizar_aba1() -> None:
             ),
             tipologias=staged["tipologias"],
         )
-        if projeto.terreno.model_dump_json() != novo_terreno.model_dump_json():
-            set_projeto(projeto.model_copy(update={"terreno": novo_terreno}))
+        tma = staged.get("tma_anual")
+        terreno_mudou = projeto.terreno.model_dump_json() != novo_terreno.model_dump_json()
+        tma_mudou = tma is not None and abs(projeto.parametros.tma_anual - float(tma)) > 0.001
+        if terreno_mudou or tma_mudou:
+            update: dict = {"terreno": novo_terreno}
+            if tma is not None:
+                update["parametros"] = ParametrosFinanceiros(tma_anual=float(tma))
+            set_projeto(projeto.model_copy(update=update))
             invalidar_resultado()
     except Exception:
         pass
