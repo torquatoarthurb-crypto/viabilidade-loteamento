@@ -136,7 +136,7 @@ def _renderizar_comparativo(resumo: dict) -> None:
         with st.container(border=True):
             st.markdown("#### Resultado para o Investidor (% do Negócio)")
             pct = resumo.get("investidor_pct_negocio", 0)
-            lucro_inv = resumo.get("retorno_investidor_pago", resumo.get("lucro_investidor", 0))
+            lucro_inv = resumo.get("lucro_investidor", 0) or 0  # obrigacao total P&L
             lucro_lot = resumo.get("lucro_loteadora", 0)
             lucro_total = resumo.get("lucro_bruto_antes_investidor", resumo.get("lucro_liquido", 0))
             aporte_total = resumo.get("aporte_investidor_total", 0) or 0

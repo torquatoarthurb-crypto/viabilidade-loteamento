@@ -385,20 +385,24 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
             linha = _sec(ws, linha, "INVESTIDOR — % DO NEGÓCIO", ncols=3, altura=18)
             pct_inv = r.get("investidor_pct_negocio", 0)
             lucro_bruto = r.get("lucro_bruto_antes_investidor", r.get("lucro_liquido", 0))
-            lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0))
-            lucro_lot = r.get("lucro_loteadora", 0)
+            lucro_inv = r.get("lucro_investidor", 0) or 0   # obrigacao total P&L
+            lucro_lot = r.get("lucro_loteadora", 0) or 0
             pendente = r.get("retorno_investidor_pendente", 0) or 0
             aporte_total = r.get("aporte_investidor_total", 0) or 0
+            cap_pago = r.get("retorno_capital_pago", 0) or 0
+            lucro_inv_pago = r.get("retorno_investidor_pago", 0) or 0
             rows = [
-                ("Participacao do investidor",       f"{pct_inv:.1f}%",       False, None),
-                ("Resultado bruto (antes investidor)", _fmt_rs(lucro_bruto),  False, None),
-                ("Aporte total do investidor",        _fmt_rs(aporte_total),  False, None),
-                ("Retorno pago ao investidor",        _fmt_rs(lucro_inv),     False, None),
-                ("Resultado loteadora",               _fmt_rs(lucro_lot),     True,
+                ("Participacao do investidor",         f"{pct_inv:.1f}%",        False, None),
+                ("Resultado bruto (antes investidor)", _fmt_rs(lucro_bruto),     False, None),
+                ("Aporte total do investidor",         _fmt_rs(aporte_total),    False, None),
+                ("Capital devolvido ao investidor",    _fmt_rs(cap_pago),        False, None),
+                ("Participacao no lucro paga",         _fmt_rs(lucro_inv_pago),  False, None),
+                ("Participacao total (obrigacao DRE)", _fmt_rs(lucro_inv),       False, None),
+                ("Resultado loteadora",                _fmt_rs(lucro_lot),       True,
                  _C_GREEN if lucro_lot >= 0 else _C_RED),
             ]
             if pendente > 1:
-                rows.append(("Retorno pendente (caixa insuf.)", _fmt_rs(pendente), False, _C_OCHRE_L))
+                rows.append(("Participacao pendente (caixa insuf.)", _fmt_rs(pendente), False, _C_OCHRE_L))
             for label, val, negrito, cor_f in rows:
                 cl = ws.cell(linha, 1, label)
                 cl.font = _F_B10 if negrito else _F_N10

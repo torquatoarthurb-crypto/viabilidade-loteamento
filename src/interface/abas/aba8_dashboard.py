@@ -594,7 +594,7 @@ def _renderizar_cascata_dre(r: dict, etapas_obra: dict | None = None, ind: dict 
 
     # Investidor % do negocio — retorno progressivo pos-obras
     if r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio":
-        lucro_inv = r.get("retorno_investidor_pago", r.get("lucro_investidor", 0)) or 0
+        lucro_inv = r.get("lucro_investidor", 0) or 0  # obrigacao total P&L
         lucro_lot = r.get("lucro_loteadora", 0) or 0
         pct_inv = r.get("investidor_pct_negocio", 0) or 0
         pendente = r.get("retorno_investidor_pendente", 0) or 0
