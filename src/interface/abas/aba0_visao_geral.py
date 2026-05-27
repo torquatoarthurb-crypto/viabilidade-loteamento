@@ -188,10 +188,11 @@ def renderizar() -> None:
     vgv_disponivel = r["vgv_vendavel"]
     lucro = r["lucro_liquido"]
     vpl = ind["vpl"]
-    tir = ind.get("tir_anual")
+    sem_exposicao = abs(ind.get("exposicao_maxima", 0)) < 1.0
+    tir = None if sem_exposicao else ind.get("tir_anual")
     exp_max = abs(ind["exposicao_maxima"])
     mes_exp = ind["mes_exposicao_maxima"]
-    pb = ind.get("payback_simples_meses")
+    pb = None if sem_exposicao else ind.get("payback_simples_meses")
     margem = (lucro / vgv_disponivel * 100) if vgv_disponivel > 0 else 0
     tma = projeto.parametros.tma_anual
     horizonte = r.get("horizonte_meses", 0)
@@ -216,7 +217,7 @@ def renderizar() -> None:
             tir_sub = f"Abaixo da TMA ({tma:.0f}% a.a.)"
     else:
         tir_cor = "neutro"
-        tir_sub = ""
+        tir_sub = "Sem exposição de capital" if sem_exposicao else ""
 
     # UX-08: veredito VPL
     vpl_cor = "verde" if vpl > 0 else "vermelho"

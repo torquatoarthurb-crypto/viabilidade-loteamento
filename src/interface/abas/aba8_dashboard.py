@@ -329,10 +329,11 @@ def _kpis_topo(r: dict, ind: dict, projeto=None, custo_estimado: float = 0.0, ta
     marg_liq = (lucro / vgv_v * 100) if vgv_v > 0 else 0
     marg_bruta = (lucro / vgv_b * 100) if vgv_b > 0 else 0
     vpl = ind["vpl"]
-    tir = ind.get("tir_anual")
+    sem_exposicao = abs(ind.get("exposicao_maxima", 0)) < 1.0
+    tir = None if sem_exposicao else ind.get("tir_anual")
     exp_max = abs(ind["exposicao_maxima"])
     mes_exp = ind["mes_exposicao_maxima"]
-    pb = ind.get("payback_simples_meses")
+    pb = None if sem_exposicao else ind.get("payback_simples_meses")
     horizonte = r.get("horizonte_meses", 0)
     rec_fin = r.get("receita_financeira", 0)
     custo_fin = r.get("custo_financiamento_total", 0)
@@ -375,7 +376,7 @@ def _kpis_topo(r: dict, ind: dict, projeto=None, custo_estimado: float = 0.0, ta
         else:
             tir_cor, tir_sub = "vermelho", f"Abaixo da TMA ({tma:.0f}% a.a.)"
     else:
-        tir_cor, tir_sub = "neutro", "TIR não convergiu"
+        tir_cor, tir_sub = "neutro", ("Sem exposição de capital" if sem_exposicao else "TIR não convergiu")
 
     vpl_cor = "verde" if vpl > 0 else "vermelho"
     pb_val = f"M{pb}" if pb else "—"
@@ -661,7 +662,8 @@ def _renderizar_cards_margem(r: dict, ind: dict) -> None:
     margem_vv = r.get("margem_sobre_vgv_vendavel")
     margem_vb = r.get("margem_sobre_vgv_bruto")
     multiplicador = ind.get("lucro_sobre_exposicao")
-    tir = ind.get("tir_anual")
+    sem_exposicao = abs(ind.get("exposicao_maxima", 0)) < 1.0
+    tir = None if sem_exposicao else ind.get("tir_anual")
 
     def cor_margem(v) -> str:
         if v is None:

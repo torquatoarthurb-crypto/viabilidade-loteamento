@@ -234,8 +234,9 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
     # KPIs
     linha = _sec(ws, linha, "INDICADORES PRINCIPAIS", ncols=3, altura=20)
 
-    tir = ind.get("tir_anual")
-    pb  = ind.get("payback_simples_meses")
+    sem_exposicao = abs(ind.get("exposicao_maxima", 0)) < 1.0
+    tir = None if sem_exposicao else ind.get("tir_anual")
+    pb  = None if sem_exposicao else ind.get("payback_simples_meses")
     mult = ind.get("lucro_sobre_exposicao")
     margem_vv = r.get("margem_sobre_vgv_vendavel")
     margem_vb = r.get("margem_sobre_vgv_bruto")

@@ -261,10 +261,11 @@ def gerar_relatorio_html(projeto, resultado) -> str:
     permuta_fis  = vgv_bruto - vgv_vendavel
     ajuste_pp    = vgv_efetivo - vgv_vendavel
 
-    tir       = ind.get("tir_anual")
+    sem_exposicao = abs(ind.get("exposicao_maxima", 0)) < 1.0
+    tir       = None if sem_exposicao else ind.get("tir_anual")
     vpl       = ind.get("vpl")
-    payback   = ind.get("payback_simples_meses")
-    pb_desc   = ind.get("payback_descontado_meses")
+    payback   = None if sem_exposicao else ind.get("payback_simples_meses")
+    pb_desc   = None if sem_exposicao else ind.get("payback_descontado_meses")
     exposicao = ind.get("exposicao_maxima")
     mult      = ind.get("lucro_sobre_exposicao")
     mes_exp   = ind.get("mes_exposicao_maxima", "—")
