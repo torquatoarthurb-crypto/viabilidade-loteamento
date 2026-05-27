@@ -343,6 +343,45 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         _retorno_inv_pago = total_participacao - participacao_restante
         _retorno_inv_pendente = participacao_restante
 
+    # ----- 9d. SOCIO TERRENISTA — % do resultado, sem aporte, pos-quitacao do banco -----
+    _ter_ativo = getattr(projeto.aquisicao, "ativo_socio_terrenista", False)
+    _lucro_ter_pago: float = 0.0
+    _lucro_ter_pendente: float = 0.0
+
+    if _ter_ativo:
+        pct_ter = getattr(projeto.aquisicao, "pct_socio_terrenista", 0.0)
+        total_participacao_ter = max(0.0, _lucro_base_bruto * pct_ter / 100.0)
+
+        # Determinar o mes em que a divida bancaria e zerada (condicao para comecar a pagar)
+        mes_banco_quitado = mes_termino_obras
+        if fin_data is not None:
+            saldo_dev_arr = fin_data["saldo_devedor"]
+            for _m in range(mes_termino_obras, n):
+                if _m < len(saldo_dev_arr) and saldo_dev_arr[_m] < 0.01:
+                    mes_banco_quitado = _m
+                    break
+
+        saldo_acum_arr = df["Saldo Acumulado"].to_numpy(dtype=float).copy()
+        retorno_ter_arr = np.zeros(n)
+        participacao_ter_restante = total_participacao_ter
+
+        for mes in range(mes_banco_quitado, n):
+            disponivel = saldo_acum_arr[mes]
+            if disponivel <= 0.01 or participacao_ter_restante <= 0.01:
+                continue
+            pmt = min(disponivel, participacao_ter_restante)
+            participacao_ter_restante -= pmt
+            saldo_acum_arr[mes:] -= pmt
+            retorno_ter_arr[mes] = pmt
+
+        if total_participacao_ter > 0.01:
+            df["Retorno Terrenista"] = retorno_ter_arr
+            df["Total Saidas"] = df["Total Saidas"] + retorno_ter_arr
+            df["Saldo do Mes"] = df["Saldo do Mes"] - retorno_ter_arr
+            df["Saldo Acumulado"] = saldo_acum_arr
+            _lucro_ter_pago = total_participacao_ter - participacao_ter_restante
+            _lucro_ter_pendente = participacao_ter_restante
+
     fluxo = df["Saldo do Mes"].to_numpy()
     indicadores = _calcular_indicadores(fluxo, tma_mensal)
 
@@ -424,34 +463,50 @@ def calcular_fluxo_caixa(projeto: Projeto) -> ResultadoCalculo:
         resumo["saldo_devedor_maximo"] = 0.0
         resumo["saldo_devedor_final"] = 0.0
 
+    # Parceiros — base comum para calculo de obrigacoes P&L
+    resumo["lucro_bruto_antes_parceiros"] = _lucro_base_bruto
+
     # Investidor
     resumo["investidor_ativo"] = getattr(projeto.financiamento, "ativo_investidor", False)
     resumo["investidor_modo"] = getattr(projeto.financiamento, "modo_investidor", "pct_negocio")
+    _obrigacao_inv: float = 0.0
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "pct_negocio":
         pct_inv = getattr(projeto.financiamento, "investidor_pct_negocio", 20.0)
-        # obrigacao total P&L = pct% do resultado operacional antes de fluxos do investidor
-        _full_participacao = max(0.0, _lucro_base_bruto * pct_inv / 100.0)
-        lucro_loteadora = _lucro_base_bruto - _full_participacao
+        _obrigacao_inv = max(0.0, _lucro_base_bruto * pct_inv / 100.0)
         resumo["investidor_pct_negocio"] = pct_inv
-        resumo["lucro_bruto_antes_investidor"] = _lucro_base_bruto
-        resumo["lucro_investidor"] = _full_participacao          # obrigacao total (perspectiva DRE)
-        resumo["retorno_capital_pago"] = _retorno_capital_pago   # capital aportado devolvido
-        resumo["retorno_investidor_pago"] = _retorno_inv_pago    # participacao no lucro paga
-        resumo["retorno_investidor_pendente"] = _retorno_inv_pendente  # participacao pendente
+        resumo["lucro_bruto_antes_investidor"] = _lucro_base_bruto  # retrocompat
+        resumo["lucro_investidor"] = _obrigacao_inv
+        resumo["retorno_capital_pago"] = _retorno_capital_pago
+        resumo["retorno_investidor_pago"] = _retorno_inv_pago
+        resumo["retorno_investidor_pendente"] = _retorno_inv_pendente
         resumo["aporte_investidor_total"] = (
             float(df["Aporte Investidor"].sum()) if "Aporte Investidor" in df.columns else 0.0
         )
-        # Lucro liquido e margens refletem perspectiva P&L da loteadora (obrigacao total deduzida)
-        resumo["lucro_loteadora"] = lucro_loteadora
-        resumo["lucro_liquido"] = lucro_loteadora
-        if resumo["vgv_bruto"] > 0:
-            resumo["margem_sobre_vgv_bruto"] = lucro_loteadora / resumo["vgv_bruto"]
-        if resumo["vgv_vendavel"] > 0:
-            resumo["margem_sobre_vgv_vendavel"] = lucro_loteadora / resumo["vgv_vendavel"]
     if resumo["investidor_ativo"] and resumo["investidor_modo"] == "emprestimo" and fin_data is not None:
         resumo["custo_juros_investidor"] = float(fin_data["juros_investidor"].sum())
         resumo["saldo_devedor_investidor_maximo"] = float(fin_data["saldo_devedor_investidor"].max())
         resumo["saldo_devedor_investidor_final"] = fin_data["saldo_devedor_investidor_final"]
+
+    # Socio Terrenista
+    resumo["socio_terrenista_ativo"] = _ter_ativo
+    _obrigacao_ter: float = 0.0
+    if _ter_ativo:
+        pct_ter_r = getattr(projeto.aquisicao, "pct_socio_terrenista", 0.0)
+        _obrigacao_ter = max(0.0, _lucro_base_bruto * pct_ter_r / 100.0)
+        resumo["pct_socio_terrenista"] = pct_ter_r
+        resumo["lucro_terrenista"] = _obrigacao_ter
+        resumo["retorno_terrenista_pago"] = _lucro_ter_pago
+        resumo["retorno_terrenista_pendente"] = _lucro_ter_pendente
+
+    # Lucro loteadora = resultado operacional - obrigacoes totais de todos os parceiros
+    if _obrigacao_inv > 0.01 or _obrigacao_ter > 0.01:
+        lucro_loteadora_final = _lucro_base_bruto - _obrigacao_inv - _obrigacao_ter
+        resumo["lucro_loteadora"] = lucro_loteadora_final
+        resumo["lucro_liquido"] = lucro_loteadora_final
+        if resumo["vgv_bruto"] > 0:
+            resumo["margem_sobre_vgv_bruto"] = lucro_loteadora_final / resumo["vgv_bruto"]
+        if resumo["vgv_vendavel"] > 0:
+            resumo["margem_sobre_vgv_vendavel"] = lucro_loteadora_final / resumo["vgv_vendavel"]
 
     return ResultadoCalculo(
         fluxo_caixa=df,

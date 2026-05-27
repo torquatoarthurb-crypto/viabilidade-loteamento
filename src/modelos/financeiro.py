@@ -136,6 +136,16 @@ class AquisicaoTerreno(BaseModel):
     custo_cartorio: float = Field(default=0, ge=0, description="Escritura e registro (R$)")
     mes_pagamento_cartorio: int = Field(default=0, ge=0)
 
+    # Socio Terrenista — recebe % do resultado do negocio como contraprestacao do terreno
+    ativo_socio_terrenista: bool = Field(
+        default=False,
+        description="Terrenista como socio: recebe % do resultado liquido do negocio.",
+    )
+    pct_socio_terrenista: float = Field(
+        default=0.0, ge=0.0, le=100.0,
+        description="% do resultado liquido destinado ao socio terrenista.",
+    )
+
     @model_validator(mode="after")
     def _valida(self) -> "AquisicaoTerreno":
         if self.forma_pagamento == "parcelado" and self.qtd_parcelas < 2:

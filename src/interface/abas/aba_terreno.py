@@ -492,7 +492,33 @@ def _renderizar_opcao_permuta_fisica(projeto) -> list:
 # AUTO-SAVE
 # ============================================================
 
-def _autosave_multi(tem_fisica: bool, tem_financeira: bool, tem_torna: bool, result: dict, projeto) -> None:
+def _renderizar_socio_terrenista(projeto) -> dict:
+    acq = projeto.aquisicao
+    pct_atual = float(getattr(acq, "pct_socio_terrenista", 0.0))
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        pct = numero_brl(
+            "Participação no resultado (%)",
+            value=pct_atual,
+            key="ater_st_pct",
+            min_value=0.01,
+            max_value=99.0,
+            help=(
+                "% do resultado líquido do negócio que o terrenista receberá como sócio. "
+                "Pago somente após término de obras, caixa positivo e quitação total do financiamento bancário."
+            ),
+        )
+    with col2:
+        st.info(
+            f"O terrenista recebe **{pct:.1f}% do resultado líquido** do negócio. "
+            "O pagamento é progressivo, iniciando apenas após: "
+            "**1)** término de obras, **2)** caixa positivo e **3)** quitação total do financiamento bancário."
+        )
+    return {"pct_socio_terrenista": pct}
+
+
+def _autosave_multi(tem_fisica: bool, tem_financeira: bool, tem_torna: bool, tem_st: bool, result: dict, projeto) -> None:
     try:
         # tipo_permuta: "fisica" tem prioridade pois afeta VGV vendavel (exigido pelo validador do modelo)
         if tem_fisica:
@@ -522,6 +548,13 @@ def _autosave_multi(tem_fisica: bool, tem_financeira: bool, tem_torna: bool, res
                 valor_total=max(float(projeto.aquisicao.valor_total), 1.0),
                 forma_pagamento="sem_desembolso",
             )
+
+        # socio terrenista — sobrescreve os campos de socio mantendo o resto da aquisicao
+        pct_st = float(result.get("pct_socio_terrenista", 0.0)) if tem_st else 0.0
+        nova_acq = nova_acq.model_copy(update={
+            "ativo_socio_terrenista": tem_st,
+            "pct_socio_terrenista": pct_st,
+        })
 
         nova_aba2 = projeto.receitas.model_copy(update={
             "tipo_permuta": tipo_permuta,
@@ -562,10 +595,11 @@ def renderizar() -> None:
     _fisica_default = bool(projeto.receitas.permuta_fisica)
     _financeira_default = projeto.impostos.permuta_financeira is not None
     _torna_default = projeto.aquisicao.forma_pagamento != "sem_desembolso"
+    _st_default = bool(getattr(projeto.aquisicao, "ativo_socio_terrenista", False))
 
     with st.container(border=True):
         st.markdown("#### Forma de Aquisição")
-        col_f, col_fin, col_t = st.columns(3)
+        col_f, col_fin, col_t, col_st = st.columns(4)
         with col_f:
             tem_fisica = st.checkbox(
                 "Permuta Física",
@@ -586,6 +620,13 @@ def renderizar() -> None:
                 value=_torna_default,
                 key="ater_tem_torna",
                 help="Pagamento em dinheiro ao terrenista, além das permutas.",
+            )
+        with col_st:
+            tem_st = st.checkbox(
+                "Sócio Terrenista",
+                value=_st_default,
+                key="ater_tem_st",
+                help="Terrenista recebe % do resultado líquido do negócio, pago após quitação do financiamento bancário.",
             )
 
     result: dict = {}
@@ -621,6 +662,15 @@ def renderizar() -> None:
     else:
         result["entrada_dinheiro"] = None
 
+    if tem_st:
+        with st.container(border=True):
+            st.markdown("#### Sócio Terrenista")
+            try:
+                r_st = _renderizar_socio_terrenista(projeto)
+                result.update(r_st)
+            except Exception:
+                pass
+
     # Salvar aba
     st.markdown("---")
     _col_sv_terr, _ = st.columns([1, 3])
@@ -632,7 +682,7 @@ def renderizar() -> None:
             width="stretch",
             icon=":material/save:",
         ):
-            _autosave_multi(tem_fisica, tem_financeira, tem_torna, result, projeto)
+            _autosave_multi(tem_fisica, tem_financeira, tem_torna, tem_st, result, projeto)
             st.rerun()
 
     try:
@@ -640,4 +690,4 @@ def renderizar() -> None:
     except Exception:
         pass
 
-    _autosave_multi(tem_fisica, tem_financeira, tem_torna, result, projeto)
+    _autosave_multi(tem_fisica, tem_financeira, tem_torna, tem_st, result, projeto)

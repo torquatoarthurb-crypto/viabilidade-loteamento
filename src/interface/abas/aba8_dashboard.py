@@ -592,30 +592,42 @@ def _renderizar_cascata_dre(r: dict, etapas_obra: dict | None = None, ind: dict 
 
     partes.append(linha_resultado)
 
-    # Investidor % do negocio — retorno progressivo pos-obras
-    if r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio":
-        lucro_inv = r.get("lucro_investidor", 0) or 0  # obrigacao total P&L
+    # Parceiros — investidor e/ou socio terrenista
+    _tem_inv = r.get("investidor_ativo") and r.get("investidor_modo") == "pct_negocio"
+    _tem_ter = r.get("socio_terrenista_ativo")
+    if _tem_inv or _tem_ter:
         lucro_lot = r.get("lucro_loteadora", 0) or 0
-        pct_inv = r.get("investidor_pct_negocio", 0) or 0
-        pendente = r.get("retorno_investidor_pendente", 0) or 0
         classe_lot = "dre-row-resultado" + ("" if lucro_lot >= 0 else " negativo")
-        partes.extend([
-            separador(),
-            linha_deducao(f"(-) Retorno Investidor ({pct_inv:.0f}% do lucro)", lucro_inv),
-            (
-                f'<tr class="{classe_lot}">'
-                f'<td>= Resultado Loteadora</td>'
-                f'<td>{formatar_brl(lucro_lot)}</td>'
-                f'<td>{pct_vv(lucro_lot)}</td>'
-                f'<td>{pct_vb(lucro_lot)}</td></tr>'
-            ),
-        ])
-        if pendente > 1:
-            partes.append(
-                f'<tr class="dre-row-deduction"><td colspan="4" style="color:#B07D2E;">'
-                f'&nbsp;&nbsp;&nbsp;Retorno pendente: {formatar_brl(pendente)} '
-                f'(caixa insuficiente no horizonte do projeto)</td></tr>'
-            )
+        partes.append(separador())
+        if _tem_inv:
+            lucro_inv = r.get("lucro_investidor", 0) or 0
+            pct_inv = r.get("investidor_pct_negocio", 0) or 0
+            pendente_inv = r.get("retorno_investidor_pendente", 0) or 0
+            partes.append(linha_deducao(f"(-) Participação Investidor ({pct_inv:.0f}% do resultado)", lucro_inv))
+            if pendente_inv > 1:
+                partes.append(
+                    f'<tr class="dre-row-deduction"><td colspan="4" style="color:#B07D2E;">'
+                    f'&nbsp;&nbsp;&nbsp;Retorno investidor pendente: {formatar_brl(pendente_inv)} '
+                    f'(caixa insuficiente no horizonte do projeto)</td></tr>'
+                )
+        if _tem_ter:
+            lucro_ter = r.get("lucro_terrenista", 0) or 0
+            pct_ter = r.get("pct_socio_terrenista", 0) or 0
+            pendente_ter = r.get("retorno_terrenista_pendente", 0) or 0
+            partes.append(linha_deducao(f"(-) Participação S. Terrenista ({pct_ter:.0f}% do resultado)", lucro_ter))
+            if pendente_ter > 1:
+                partes.append(
+                    f'<tr class="dre-row-deduction"><td colspan="4" style="color:#B07D2E;">'
+                    f'&nbsp;&nbsp;&nbsp;Retorno terrenista pendente: {formatar_brl(pendente_ter)} '
+                    f'(caixa insuficiente no horizonte do projeto)</td></tr>'
+                )
+        partes.append(
+            f'<tr class="{classe_lot}">'
+            f'<td>= Resultado Loteadora</td>'
+            f'<td>{formatar_brl(lucro_lot)}</td>'
+            f'<td>{pct_vv(lucro_lot)}</td>'
+            f'<td>{pct_vb(lucro_lot)}</td></tr>'
+        )
 
     tbody = "".join(p for p in partes if p)
     thead = (

@@ -435,6 +435,37 @@ def _dashboard(wb: Workbook, projeto: Projeto, resultado: ResultadoCalculo) -> N
                     cv.fill = _fill(cor_f)
                 linha += 1
 
+    # Secao de socio terrenista (so quando ativo)
+    if r.get("socio_terrenista_ativo"):
+        linha += 1
+        linha = _sec(ws, linha, "SÓCIO TERRENISTA — % DO RESULTADO", ncols=3, altura=18)
+        pct_ter_x = r.get("pct_socio_terrenista", 0) or 0
+        lucro_bruto_x = r.get("lucro_bruto_antes_parceiros", r.get("lucro_liquido", 0)) or 0
+        lucro_ter_x = r.get("lucro_terrenista", 0) or 0
+        lucro_ter_pago_x = r.get("retorno_terrenista_pago", 0) or 0
+        pendente_ter_x = r.get("retorno_terrenista_pendente", 0) or 0
+        lucro_lot_x = r.get("lucro_loteadora", 0) or 0
+        rows_ter = [
+            ("Participacao do terrenista",         f"{pct_ter_x:.1f}%",            False, None),
+            ("Resultado bruto (antes parceiros)",  _fmt_rs(lucro_bruto_x),         False, None),
+            ("Participacao total (obrigacao DRE)", _fmt_rs(lucro_ter_x),           False, None),
+            ("Participacao paga ao terrenista",    _fmt_rs(lucro_ter_pago_x),      False, None),
+            ("Resultado loteadora",                _fmt_rs(lucro_lot_x),           True,
+             _C_GREEN if lucro_lot_x >= 0 else _C_RED),
+        ]
+        if pendente_ter_x > 1:
+            rows_ter.append(("Participacao pendente (caixa insuf.)", _fmt_rs(pendente_ter_x), False, _C_OCHRE_L))
+        for label, val, negrito, cor_f in rows_ter:
+            cl = ws.cell(linha, 1, label)
+            cl.font = _F_B10 if negrito else _F_N10
+            cv = ws.cell(linha, 2, val)
+            cv.font = _F_B10 if negrito else _F_N10
+            cv.alignment = Alignment(horizontal="right")
+            if cor_f:
+                cl.fill = _fill(cor_f)
+                cv.fill = _fill(cor_f)
+            linha += 1
+
     # Secao de reajustes monetarios (so quando ativo)
     if projeto.reajustes.ativo and (r.get("variacao_custo_obras_incc") or r.get("receita_correcao_total")):
         linha += 1
@@ -860,6 +891,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Amortizacao Investidor":          "Amortização Investidor",
         "Juros Investidor":                "Juros Investidor",
         "Retorno Investidor":              "Retorno Investidor",
+        "Retorno Terrenista":              "Retorno Terrenista",
         "Total Saidas":                    "Total Saídas",
         "Saldo do Mes":                    "Saldo do Mês",
         "Saldo Acumulado":                 "Saldo Acumulado",
@@ -877,7 +909,7 @@ def _aba_fluxo_caixa(wb: Workbook, projeto: "Projeto", resultado: ResultadoCalcu
         "Marketing", "Outros Desenvolvimento", "Administracao",
         "Amortizacao Financiamento", "Juros Financiamento Banco",
         "Comissao Abertura Financiamento", "Amortizacao Investidor", "Juros Investidor",
-        "Retorno Investidor",
+        "Retorno Investidor", "Retorno Terrenista",
         "Comissao", "Impostos", "Permuta Financeira",
     ]
 
