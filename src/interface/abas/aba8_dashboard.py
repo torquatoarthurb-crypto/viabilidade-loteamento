@@ -1138,6 +1138,10 @@ def _cal_label_from_inicio(mes_int: int, inicio) -> str:
         return f"M{mes_int}"
 
 
+_COLS_ACUM_TOTAL = {"Saldo Acumulado", "Saldo Descontado Acumulado"}
+_COL_TOTAL = "TOTAL"
+
+
 def _transpor_df_formatado(df, marcos: dict[str, str] | None = None, inicio_projeto=None):
     cols_val = [c for c in df.columns if c != "Mes"]
     df_m = df[df[cols_val].abs().sum(axis=1) > 0].copy()
@@ -1157,15 +1161,31 @@ def _transpor_df_formatado(df, marcos: dict[str, str] | None = None, inicio_proj
     df_m.index = [_fmt_mes_label(mes) for mes in df_m.index]
     df_t = df_m.T
     df_t = df_t[(df_t.abs() > 0.5).any(axis=1)]
+
+    # Calcula totais por linha antes de formatar
+    totais: dict[str, float] = {}
+    for nome in df_t.index:
+        vals = pd.to_numeric(df_t.loc[nome], errors="coerce").fillna(0.0)
+        if nome in _COLS_ACUM_TOTAL:
+            # Linhas acumuladas: usa o ultimo valor nao-zero (e um total acumulado, nao soma)
+            non_zero = vals[vals.abs() > 0.5]
+            totais[nome] = float(non_zero.iloc[-1]) if len(non_zero) > 0 else 0.0
+        else:
+            totais[nome] = float(vals.sum())
+
     df_fmt = df_t.copy()
     for col in df_fmt.columns:
         df_fmt[col] = df_fmt[col].map(_fmt_int_brl)
+
+    # Coluna de totais destacada ao final
+    df_fmt[_COL_TOTAL] = [_fmt_int_brl(totais.get(nome, 0)) for nome in df_fmt.index]
     df_fmt.index.name = "Item"
 
     # Prepend Marcos row when provided (keys are column labels)
     if marcos:
         marcos_row = {col: marcos.get(col, "") for col in df_fmt.columns}
-        if any(marcos_row.values()):
+        marcos_row[_COL_TOTAL] = ""
+        if any(v for k, v in marcos_row.items() if k != _COL_TOTAL):
             df_marcos = pd.DataFrame([marcos_row], index=pd.Index(["Marcos"], name="Item"))
             df_fmt = pd.concat([df_marcos, df_fmt])
 
@@ -1173,38 +1193,65 @@ def _transpor_df_formatado(df, marcos: dict[str, str] | None = None, inicio_proj
 
 
 def _estilizar_tabela(df_fmt):
+    _total_idx = (
+        list(df_fmt.columns).index(_COL_TOTAL)
+        if _COL_TOTAL in df_fmt.columns else None
+    )
+
     def row_style(row):
         nome = row.name
-        # Linha de marcos: estilo especial ocre, italic, centralizado
-        if nome == "Marcos":
-            return [
-                "background-color: #EFF6FF; color: #1E3A8A; font-size: 10px; "
-                "text-align: center; font-style: italic; "
-                "padding: 2px 4px; border: 1px solid #D8D4C8;"
-            ] * len(row)
-        bg = _BG_LINHAS.get(nome, "#F5F3EE")
-        bold = "bold" if nome in _NEGRITO_LINHAS else "normal"
-        # Linhas de saldo: cor do texto depende do sinal de cada celula
-        if nome in _SALDO_LINHAS:
-            styles = []
-            for v in row:
-                if isinstance(v, str) and v.startswith("-"):
-                    cor_texto = "#C05454"
-                elif isinstance(v, str) and v != "":
-                    cor_texto = "#2E6B47"
+        styles = []
+        for col, v in zip(row.index, row):
+            is_total = col == _COL_TOTAL
+            bg_base = _BG_LINHAS.get(nome, "#F5F3EE")
+            bg = "#DEDAD0" if is_total else bg_base
+            bold = "bold" if (nome in _NEGRITO_LINHAS or is_total) else "normal"
+            bl = "border-left: 3px solid #9C9888;" if is_total else ""
+
+            if nome == "Marcos":
+                if is_total:
+                    styles.append(
+                        "background-color: #D9DCE8; color: #1E3A8A; font-size: 10px; "
+                        "text-align: center; font-style: italic; "
+                        "padding: 2px 4px; border: 1px solid #D8D4C8; border-left: 3px solid #9C9888;"
+                    )
                 else:
-                    cor_texto = "#1A1916"
-                styles.append(
-                    f"background-color: {bg}; font-weight: {bold}; "
-                    f"color: {cor_texto}; font-size: 12px; text-align: right; "
-                    f"padding: 2px 8px; border: 1px solid #D8D4C8;"
-                )
-            return styles
-        return [
-            f"background-color: {bg}; font-weight: {bold}; "
-            f"color: #1A1916; font-size: 12px; text-align: right; "
-            f"padding: 2px 8px; border: 1px solid #D8D4C8;"
-        ] * len(row)
+                    styles.append(
+                        "background-color: #EFF6FF; color: #1E3A8A; font-size: 10px; "
+                        "text-align: center; font-style: italic; "
+                        "padding: 2px 4px; border: 1px solid #D8D4C8;"
+                    )
+                continue
+
+            if nome in _SALDO_LINHAS:
+                if isinstance(v, str) and v.startswith("-"):
+                    cor = "#C05454"
+                elif isinstance(v, str) and v != "":
+                    cor = "#2E6B47"
+                else:
+                    cor = "#1A1916"
+            else:
+                cor = "#1A1916"
+
+            styles.append(
+                f"background-color: {bg}; font-weight: {bold}; "
+                f"color: {cor}; font-size: 12px; text-align: right; "
+                f"padding: 2px 8px; border: 1px solid #D8D4C8; {bl}"
+            )
+        return styles
+
+    extra_styles = []
+    if _total_idx is not None:
+        extra_styles.append({
+            "selector": f"th.col_heading.level0.col{_total_idx}",
+            "props": [
+                ("background-color", "#C8C4B4"),
+                ("color", "#1A1916"),
+                ("font-weight", "bold"),
+                ("border-left", "3px solid #9C9888"),
+                ("min-width", "80px"),
+            ],
+        })
 
     styler = (
         df_fmt.style
@@ -1223,6 +1270,7 @@ def _estilizar_tabela(df_fmt):
             {"selector": "th.col_heading", "props": [
                 ("min-width", "70px"), ("max-width", "100px"),
             ]},
+            *extra_styles,
         ])
     )
     return styler
@@ -1232,7 +1280,8 @@ def _estilizar_tabela(df_fmt):
 def _dlg_fluxo_tela_cheia(df_agg, marcos_labels: dict[str, str] | None = None, inicio_projeto=None) -> None:
     df_t = _transpor_df_formatado(df_agg, marcos=marcos_labels, inicio_projeto=inicio_projeto)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=700)
-    st.caption(f"Valores em R$ mil.   {len(df_t)} linhas · {len(df_t.columns)} periodos com movimentacao.")
+    n_p = sum(1 for c in df_t.columns if c != _COL_TOTAL)
+    st.caption(f"Valores em R$ mil.   {len(df_t)} linhas · {n_p} periodos com movimentacao.")
 
 
 _LINHAS_COMPACTAS = frozenset({
@@ -1321,9 +1370,10 @@ def _tabela_fluxo_mensal(df) -> None:
     altura = min(580, (len(df_t) + 1) * 36 + 38)
     st.dataframe(_estilizar_tabela(df_t), use_container_width=True, height=altura)
     legenda_periodo = {"Mensal": "meses", "Trimestral": "trimestres", "Anual": "anos"}[periodo]
+    n_periodos = sum(1 for c in df_t.columns if c != _COL_TOTAL)
     st.caption(
         "Valores em **R$ mil**.   "
-        f"{len(df_t)} linhas · {len(df_t.columns)} {legenda_periodo} com movimentacao."
+        f"{len(df_t)} linhas · {n_periodos} {legenda_periodo} com movimentacao."
     )
 
 
